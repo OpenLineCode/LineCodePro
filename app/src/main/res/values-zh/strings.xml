@@ -94,13 +94,13 @@
     <string name="dialog_input_title">输入</string>
     <string name="dialog_confirm_title">确认</string>
 
-    <string name="header_project_default">LineCode</string>
+    <string name="header_project_default">点击设置工作区</string>
 
-    <string name="settings_row_llm_desc">思考强度、交流语气、提示词和 reasoning 保留</string>
+    <string name="settings_row_llm_desc">交流语气、提示词、学习模式与思考过程显示</string>
     <string name="settings_row_input_desc">回车键发送或换行</string>
 
-    <string name="settings_row_models_title">模型管理</string>
-    <string name="settings_row_models_desc">供应商、密钥、模型 ID 和默认模型</string>
+    <string name="settings_row_models_title">模型提供商</string>
+    <string name="settings_row_models_desc">提供商、密钥、模型与自动识别</string>
     <string name="settings_row_mcp_title">工具与执行</string>
     <string name="settings_row_mcp_desc">工作区工具开关、SSH 执行和本地执行目标</string>
     <string name="settings_row_tool_settings_title">工具设置</string>
@@ -305,10 +305,10 @@
 
     <string name="screen_settings_title">设置</string>
     <string name="screen_settings_section_ai">AI 与模型</string>
-    <string name="screen_settings_section_tools">工具与执行</string>
+    <string name="screen_settings_section_tools">工具与扩展</string>
     <string name="screen_settings_section_ui">界面与输出</string>
     <string name="screen_settings_section_security">安全</string>
-    <string name="screen_settings_section_data">数据与系统</string>
+    <string name="screen_settings_section_data">数据与统计</string>
 
     <string name="screen_security_title">安全</string>
     <string name="screen_security_section_http">HTTP 限制</string>
@@ -328,7 +328,7 @@
     <string name="screen_llm_thinking_high">深度思考，适合复杂任务</string>
     <string name="screen_llm_thinking_max">最深度思考，适合极难问题</string>
     <string name="screen_llm_section_learning">学习与记忆</string>
-    <string name="composer_reasoning_title">思考强度</string>
+    <string name="composer_reasoning_title">%1$s 思考等级</string>
     <string name="composer_model_picker_subtitle">对接下来发送的消息生效</string>
     <string name="composer_reasoning_picker_subtitle">模型回答前的思考程度</string>
     <string name="composer_model_picker_empty">还没有模型，请先到设置 → 模型管理添加</string>

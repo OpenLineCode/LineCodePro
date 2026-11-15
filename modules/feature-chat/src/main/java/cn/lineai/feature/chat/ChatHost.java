@@ -70,6 +70,17 @@ public interface ChatHost {
     /** Opens the workspace projects page (owned by feature-workspace). */
     void openWorkspaceProjects();
 
+    /** True when the active workspace is remote (SSH host or terminal provider). */
+    default boolean remoteWorkspaceActive() {
+        return false;
+    }
+
+    /** Loads the remote workspace tree for the drawer and attachment picker. */
+    default void loadRemoteWorkspaceTree(
+            java.util.function.Consumer<DrawerPanel.FileNode> callback) {
+        callback.accept(null);
+    }
+
     /** Opens the workspace attachment tree picker used by the composer plus button. */
     default void showChatAttachmentPicker() {
         unavailable();

@@ -233,6 +233,50 @@ public class ToolLoopEngineTest {
         assertEquals(0, model.lastToolCount);
     }
 
+    @Test public void assistantMessageCarriesTokenAccountingAndTiming() {
+        UsageModel model = new UsageModel();
+        final List<Message> assistants = new ArrayList<>();
+        final ToolLoopEngine engine = new ToolLoopEngine(model, new ToolRegistry(), context(),
+                Scheduler.immediate(), 5);
+        engine.listen(new Events() {
+            public void assistant(Message message) { assistants.add(message); }
+            public void failed(DomainException error) { fail(error.getMessage()); }
+        });
+        engine.start(config(), new ArrayList<Message>(), "c", "sys", null);
+
+        assertEquals(1, assistants.size());
+        Message message = assistants.get(0);
+        assertEquals(120, message.inputTokens);
+        assertEquals(30, message.outputTokens);
+        assertEquals(40, message.cachedTokens);
+        assertTrue(message.ttftMs >= 0L);
+        assertTrue(message.ttftMs <= message.durationMs);
+    }
+
+    @Test public void retryDiscardsTheUsageOfTheFailedAttempt() {
+        RetryUsageModel model = new RetryUsageModel();
+        final List<Message> assistants = new ArrayList<>();
+        final List<Integer> retries = new ArrayList<>();
+        final ToolLoopEngine engine = new ToolLoopEngine(model, new ToolRegistry(), context(),
+                Scheduler.immediate(), 5);
+        engine.listen(new Events() {
+            public void assistant(Message message) { assistants.add(message); }
+            public void retrying(int attempt, int max, DomainException error) {
+                retries.add(attempt);
+            }
+            public void failed(DomainException error) { fail(error.getMessage()); }
+        });
+        engine.start(config(), new ArrayList<Message>(), "c", "sys", null);
+
+        assertEquals(2, model.calls);
+        assertEquals(Collections.singletonList(1), retries);
+        assertEquals(1, assistants.size());
+        Message message = assistants.get(0);
+        assertEquals(12, message.inputTokens);
+        assertEquals(5, message.outputTokens);
+        assertEquals(3, message.cachedTokens);
+    }
+
     private static ModelConfig config() {
         return ModelConfig.builder().identity("m", "M")
                 .endpoint("p", "model", "https://example.com/v1").build();
@@ -325,6 +369,35 @@ public class ToolLoopEngineTest {
 
         public Cancellable stream(ModelConfig model, ChatRequest request, Listener listener) {
             lastToolCount = request.tools.size();
+            listener.onComplete();
+            return Cancellable.NONE;
+        }
+    }
+
+    /** Streams one text delta, then a usage-only event, then completes. */
+    private static final class UsageModel implements ModelClient {
+        public Cancellable stream(ModelConfig model, ChatRequest request, Listener listener) {
+            listener.onEvent(StreamEvent.text("hi"));
+            listener.onEvent(StreamEvent.of("", "", "stop", 120, 30, 40));
+            listener.onComplete();
+            return Cancellable.NONE;
+        }
+    }
+
+    /** Fails the first request after reporting usage, then answers normally. */
+    private static final class RetryUsageModel implements ModelClient {
+        int calls;
+
+        public Cancellable stream(ModelConfig model, ChatRequest request, Listener listener) {
+            calls++;
+            if (calls == 1) {
+                listener.onEvent(StreamEvent.of("", "", "", 99, 88, 7));
+                listener.onError(new DomainException(
+                        cn.lineai.core.kernel.error.ErrorCode.NETWORK, "boom"));
+                return Cancellable.NONE;
+            }
+            listener.onEvent(StreamEvent.text("done"));
+            listener.onEvent(StreamEvent.of("", "", "stop", 12, 5, 3));
             listener.onComplete();
             return Cancellable.NONE;
         }

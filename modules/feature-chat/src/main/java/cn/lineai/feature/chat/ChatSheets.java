@@ -8,20 +8,21 @@ import android.view.View;
 import android.view.ViewParent;
 import android.widget.LinearLayout;
 import android.widget.TextView;
+import android.widget.Toast;
 
 import java.util.ArrayList;
 import java.util.Arrays;
 import java.util.Collections;
 import java.util.List;
-import java.util.Locale;
 import java.util.function.Consumer;
 import java.util.function.Supplier;
 
 import cn.lineai.core.kernel.time.Scheduler;
 import cn.lineai.core.model.ModelConfig;
+import cn.lineai.core.model.ModelProfile;
 import cn.lineai.core.model.Project;
-import cn.lineai.core.model.UiPreferences;
-import cn.lineai.core.service.SettingsAction;
+import cn.lineai.core.model.ReasoningLevel;
+import cn.lineai.core.model.TokenText;
 import cn.lineai.ui.i18n.R;
 import cn.lineai.ui.kit.Icons;
 import cn.lineai.ui.kit.Sheets;
@@ -89,26 +90,50 @@ public final class ChatSheets {
                 PICKER_MIN_HEIGHT_DP);
     }
 
-    /** Reasoning-level picker; the chosen level is persisted and dispatched to settings. */
+    /**
+     * Per-model reasoning-level picker.
+     *
+     * <p>The rows come from the selected model's own level list, falling back to the automatic
+     * family profile. The chosen wire value is stored under
+     * {@code model.<ModelConfig.id>.reasoning} so every model keeps its own level. Models that
+     * cannot reason, forced-thinking families and models without levels report a toast instead of
+     * opening an unusable picker.</p>
+     */
     public static void showReasoningPicker(ChatHost host) {
         Tokens tokens = host.tokens();
         Context context = host.activity();
         ModelConfig model = host.models().selected();
-        String modelName = model == null ? "" : model.displayName();
-        String title = context.getString(R.string.slash_command_reasoning_title, modelName);
+        if (model == null) {
+            Toast.makeText(context, R.string.composer_model_picker_empty,
+                    Toast.LENGTH_SHORT).show();
+            return;
+        }
+        if (!model.supportsReasoning) {
+            Toast.makeText(context, R.string.model_reasoning_locked,
+                    Toast.LENGTH_SHORT).show();
+            return;
+        }
+        List<ReasoningLevel> levels = ModelReasoning.levels(model);
+        if (levels.isEmpty()) {
+            Toast.makeText(context, R.string.composer_reasoning_empty,
+                    Toast.LENGTH_SHORT).show();
+            return;
+        }
+        if (!ModelProfile.reasoningToggleable(model.modelId)) {
+            Toast.makeText(context, R.string.model_reasoning_forced, Toast.LENGTH_SHORT).show();
+        }
+        String title = context.getString(R.string.composer_reasoning_title, model.displayName());
         LinearLayout panel = pickerPanelText(host, title,
-                context.getString(R.string.composer_reasoning_picker_subtitle));
-        String current = host.settings().get(
-                UiPreferences.Field.REASONING.key, "medium");
-        String[] levels = Reasoning.LEVELS;
-        for (int i = 0; i < levels.length; i++) {
-            String level = levels[i];
-            LinearLayout row = pickerRow(host, context.getString(Reasoning.label(level)),
-                    context.getString(Reasoning.detail(level)), level.equals(current));
+                context.getString(R.string.composer_reasoning_subtitle2));
+        String current = ModelReasoning.selected(host.settings(), model);
+        String key = ModelReasoning.key(model);
+        for (ReasoningLevel level : levels) {
+            String value = level.value;
+            LinearLayout row = pickerRow(host, levelLabel(context, level),
+                    context.getString(R.string.composer_reasoning_value, value),
+                    value.equals(current));
             row.setOnClickListener(v -> {
-                host.settings().put(UiPreferences.Field.REASONING.key, level);
-                host.dispatchSettings(new SettingsAction.Change(
-                        UiPreferences.Field.REASONING, level));
+                host.settings().put(key, value);
                 dismiss(row);
             });
             panel.addView(row, new LinearLayout.LayoutParams(-1, -2));
@@ -118,24 +143,97 @@ public final class ChatSheets {
                 PICKER_MIN_HEIGHT_DP);
     }
 
-    /** Context-usage sheet with used/limit/percent rows from the controller's estimates. */
+    /** Localized row title of a reasoning level; custom levels show their own label. */
+    private static String levelLabel(Context context, ReasoningLevel level) {
+        if (!level.label.isEmpty()) {
+            return level.label;
+        }
+        int resource = presetLabel(level.preset);
+        return resource == 0 ? level.value : context.getString(resource);
+    }
+
+    /** Resource id of a built-in level preset; zero when no built-in label exists. */
+    private static int presetLabel(String preset) {
+        switch (preset) {
+            case ReasoningLevel.PRESET_OFF:
+                return R.string.screen_llm_thinking_off_label;
+            case ReasoningLevel.PRESET_AUTO:
+                return R.string.screen_llm_thinking_auto_label;
+            case ReasoningLevel.PRESET_MINIMAL:
+                return R.string.model_reasoning_minimal_label;
+            case ReasoningLevel.PRESET_LOW:
+                return R.string.screen_llm_thinking_low_label;
+            case ReasoningLevel.PRESET_MEDIUM:
+                return R.string.screen_llm_thinking_medium_label;
+            case ReasoningLevel.PRESET_HIGH:
+                return R.string.screen_llm_thinking_high_label;
+            case ReasoningLevel.PRESET_MAX:
+                return R.string.screen_llm_thinking_max_label;
+            case ReasoningLevel.PRESET_ON:
+                return R.string.model_reasoning_on_label;
+            default:
+                return 0;
+        }
+    }
+
+    /**
+     * Session statistics sheet computed from the persisted transcript.
+     *
+     * <p>Rows are grouped into context, token usage, performance and tools; every value is
+     * formatted by {@link SessionStats} with the shared token formatter, and a row without data
+     * shows the neutral empty marker instead of a misleading zero.</p>
+     */
     public static Dialog showContextUsage(ChatHost host) {
         Tokens tokens = host.tokens();
         Context context = host.activity();
-        LinearLayout panel = column(context);
-        Ui.padding(panel, 24, 22, 24, 24);
-        TextView title = Ui.medium(context, context.getString(R.string.context_usage_title),
-                Tokens.FONT_LG, tokens.text);
-        panel.addView(title, new LinearLayout.LayoutParams(-1, dp(context, 42)));
-        int used = host.chat().usedTokens();
-        int max = Math.max(1, host.chat().maxTokens());
+        ChatController chat = host.chat();
+        SessionStats stats = new SessionStats(chat.state.value().messages,
+                chat.usedTokens(), chat.maxTokens());
+        LinearLayout panel = standardPanel(host,
+                context.getString(R.string.session_stats_title));
+        sectionRow(host, panel, R.string.session_stats_section_context);
         usageRow(host, panel, R.string.context_usage_used,
-                String.format(Locale.ROOT, "%,d", used));
+                TokenText.format(stats.usedTokens));
         usageRow(host, panel, R.string.context_usage_limit,
-                String.format(Locale.ROOT, "%,d", max));
+                TokenText.format(stats.maxTokens));
         usageRow(host, panel, R.string.context_usage_percent,
-                context.getString(R.string.context_usage_percent_value, used * 100 / max));
+                context.getString(R.string.session_stats_percent_value,
+                        stats.contextPercent()));
+        sectionRow(host, panel, R.string.session_stats_section_usage);
+        usageRow(host, panel, R.string.session_stats_input,
+                TokenText.format(stats.inputTokens));
+        usageRow(host, panel, R.string.session_stats_output,
+                TokenText.format(stats.outputTokens));
+        usageRow(host, panel, R.string.session_stats_cache_hit,
+                emptyWhenBlank(context, stats.cacheHitText()));
+        sectionRow(host, panel, R.string.session_stats_section_performance);
+        usageRow(host, panel, R.string.session_stats_ttft, stats.ttftSamples == 0
+                ? emptyWhenBlank(context, "")
+                : context.getString(R.string.session_stats_ttft_value,
+                        stats.averageTtftMs()));
+        usageRow(host, panel, R.string.session_stats_tps, stats.durationMs <= 0L
+                ? emptyWhenBlank(context, "")
+                : context.getString(R.string.session_stats_tps_value, stats.tpsText()));
+        sectionRow(host, panel, R.string.session_stats_section_tools);
+        usageRow(host, panel, R.string.session_stats_tool_calls,
+                TokenText.format(stats.toolCalls));
+        panel.addView(bottomSpacer(host));
         return Sheets.showBottom(context, tokens, panel);
+    }
+
+    /** Renders the neutral empty marker for a statistics row without data. */
+    private static String emptyWhenBlank(Context context, String value) {
+        return value.isEmpty() ? context.getString(R.string.session_stats_empty) : value;
+    }
+
+    /** Adds a small section caption inside a statistics sheet. */
+    private static void sectionRow(ChatHost host, LinearLayout parent, int label) {
+        Context context = host.activity();
+        Tokens tokens = host.tokens();
+        TextView caption = text(context, context.getString(label), Tokens.FONT_XS,
+                tokens.textTertiary);
+        Ui.padding(caption, 24, 14, 24, 4);
+        parent.addView(caption, new LinearLayout.LayoutParams(-1, -2));
     }
 
     /** Alias to {@link ChatMenuSheets#showMore} for the shared entry vocabulary. */
@@ -178,6 +276,10 @@ public final class ChatSheets {
      * workspaces from blocking the drawer.
      */
     public static void loadWorkspaceTree(ChatHost host, Consumer<DrawerPanel.FileNode> callback) {
+        if (host.remoteWorkspaceActive()) {
+            host.loadRemoteWorkspaceTree(callback);
+            return;
+        }
         Project project = host.projects().selected();
         if (project == null) {
             callback.accept(null);
@@ -189,6 +291,73 @@ public final class ChatSheets {
             DrawerPanel.FileNode tree = buildTree(root, "", 0, new int[] {4000});
             scheduler.main(() -> callback.accept(tree));
         });
+    }
+
+    /**
+     * Builds a tree from the terminal provider listing output.
+     *
+     * <p>The provider returns one directory or file per line, prefixed with {@code D} or
+     * {@code F}; paths are relative to the provider home and become the node paths used by the
+     * drawer and attachment picker.</p>
+     *
+     * @param rootLabel display label of the provider home
+     * @param raw listing output; null or empty yields an empty root
+     * @return the remote workspace tree
+     */
+    public static DrawerPanel.FileNode remoteTree(String rootLabel, String raw) {
+        java.util.Map<String, java.util.List<String[]>> childrenByParent =
+                new java.util.LinkedHashMap<>();
+        java.util.Set<String> directories = new java.util.LinkedHashSet<>();
+        directories.add("");
+        if (raw != null) {
+            for (String line : raw.split("\n")) {
+                String value = line.trim();
+                if (value.length() < 3 || (value.charAt(0) != 'D' && value.charAt(0) != 'F')) {
+                    continue;
+                }
+                boolean directory = value.charAt(0) == 'D';
+                String path = cleanRemotePath(value.substring(2).trim());
+                if (path.isEmpty()) continue;
+                if (directory) directories.add(path);
+                String parent = path.lastIndexOf('/') < 0 ? ""
+                        : path.substring(0, path.lastIndexOf('/'));
+                childrenByParent.computeIfAbsent(parent, key -> new java.util.ArrayList<>())
+                        .add(new String[] {path, directory ? "1" : "0"});
+            }
+        }
+        return remoteNode(rootLabel, "", childrenByParent, directories);
+    }
+
+    /** Recursively builds one remote node from the listing maps. */
+    private static DrawerPanel.FileNode remoteNode(String name, String path,
+                                                   java.util.Map<String, java.util.List<String[]>>
+                                                           childrenByParent,
+                                                   java.util.Set<String> directories) {
+        boolean directory = directories.contains(path);
+        java.util.List<DrawerPanel.FileNode> nodes = new java.util.ArrayList<>();
+        if (directory) {
+            java.util.List<String[]> children = childrenByParent.get(path);
+            if (children != null) {
+                java.util.Collections.sort(children, (left, right) -> left[1].equals(right[1])
+                        ? left[0].compareToIgnoreCase(right[0])
+                        : right[1].compareTo(left[1]));
+                for (String[] child : children) {
+                    String childPath = child[0];
+                    String childName = childPath.substring(childPath.lastIndexOf('/') + 1);
+                    nodes.add(remoteNode(childName, childPath, childrenByParent, directories));
+                }
+            }
+        }
+        return new DrawerPanel.FileNode(name, path, directory, nodes);
+    }
+
+    /** Removes a leading "./" and trailing slashes from a provider-listed path. */
+    private static String cleanRemotePath(String path) {
+        String value = path;
+        while (value.startsWith("./")) value = value.substring(2);
+        if (value.startsWith("/")) value = value.substring(1);
+        while (value.endsWith("/")) value = value.substring(0, value.length() - 1);
+        return value;
     }
 
     /** Recursive tree build; directories first, then case-insensitive names, budget-capped. */
@@ -213,12 +382,6 @@ public final class ChatSheets {
             }
         }
         return new DrawerPanel.FileNode(dir.getName(), relative, true, children);
-    }
-
-    /** Writes the chosen reasoning level so a reopened picker shows the current one. */
-    static boolean isCurrentReasoning(ChatHost host, String level) {
-        return level.equals(host.settings().get(UiPreferences.Field.REASONING.key,
-                "medium"));
     }
 
     /** Current permission mode for checkmark rendering. */
@@ -423,35 +586,8 @@ public final class ChatSheets {
                 new LinearLayout.LayoutParams(0, -2, 1f));
         row.addView(Ui.medium(context, value, 14, tokens.text),
                 new LinearLayout.LayoutParams(-2, -2));
+        Ui.padding(row, 24, 0, 24, 0);
         parent.addView(row, new LinearLayout.LayoutParams(-1, dp(context, 42)));
     }
 
-    /** Reasoning level tokens, prices and descriptions shared by the picker and the pill. */
-    static final class Reasoning {
-        /** Supported levels in display order. */
-        static final String[] LEVELS = {"off", "auto", "low", "medium", "high", "max"};
-
-        private Reasoning() {
-        }
-
-        /** Localized short label; unknown levels fall back to medium. */
-        static int label(String level) {
-            if ("off".equals(level)) return R.string.screen_llm_thinking_off_label;
-            if ("auto".equals(level)) return R.string.screen_llm_thinking_auto_label;
-            if ("low".equals(level)) return R.string.screen_llm_thinking_low_label;
-            if ("high".equals(level)) return R.string.screen_llm_thinking_high_label;
-            if ("max".equals(level)) return R.string.screen_llm_thinking_max_label;
-            return R.string.screen_llm_thinking_medium_label;
-        }
-
-        /** Localized detail description; unknown levels fall back to medium. */
-        static int detail(String level) {
-            if ("off".equals(level)) return R.string.screen_llm_thinking_off_desc;
-            if ("auto".equals(level)) return R.string.screen_llm_thinking_auto;
-            if ("low".equals(level)) return R.string.screen_llm_thinking_low;
-            if ("high".equals(level)) return R.string.screen_llm_thinking_high;
-            if ("max".equals(level)) return R.string.screen_llm_thinking_max;
-            return R.string.screen_llm_thinking_medium;
-        }
-    }
 }

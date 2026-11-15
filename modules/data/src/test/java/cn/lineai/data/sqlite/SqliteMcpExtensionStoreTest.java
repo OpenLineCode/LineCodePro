@@ -7,7 +7,7 @@ import java.util.Arrays;
 import java.util.List;
 
 import cn.lineai.core.model.McpExtension;
-import cn.lineai.core.model.McpHeader;
+import cn.lineai.core.model.HttpHeader;
 import cn.lineai.core.model.McpToolInfo;
 
 import org.junit.After;
@@ -46,8 +46,8 @@ public class SqliteMcpExtensionStoreTest {
         return McpExtension.builder()
                 .name("Company MCP")
                 .url("https://example.com/mcp")
-                .headers(Arrays.asList(new McpHeader("Authorization", "Bearer token"),
-                        new McpHeader("X-Team", "linecode")))
+                .headers(Arrays.asList(new HttpHeader("Authorization", "Bearer token"),
+                        new HttpHeader("X-Team", "linecode")))
                 .tools(Arrays.asList(
                         new McpToolInfo("search", true, "Search docs", "{\"type\":\"object\"}"),
                         new McpToolInfo("write", false, "Write docs", "{}")))

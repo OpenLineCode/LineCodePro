@@ -11,7 +11,6 @@ import android.widget.LinearLayout;
 import android.widget.Toast;
 
 import cn.lineai.core.model.ModelConfig;
-import cn.lineai.core.model.UiPreferences;
 import cn.lineai.ui.i18n.R;
 import cn.lineai.ui.kit.Sheets;
 import cn.lineai.ui.kit.Ui;
@@ -287,8 +286,4 @@ public final class ChatMenuSheets {
         return context.getString(R.string.chat_mode_agent);
     }
 
-    /** Resaved reasoning helper used by the settings screen when it re-opens the picker. */
-    static String reasoning(ChatHost host) {
-        return host.settings().get(UiPreferences.Field.REASONING.key, "medium");
-    }
 }

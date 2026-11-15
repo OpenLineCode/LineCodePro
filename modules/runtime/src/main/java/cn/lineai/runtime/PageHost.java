@@ -83,11 +83,6 @@ public interface PageHost extends cn.lineai.feature.chat.ChatHost {
     /** Launches the SAF directory picker to register an external workspace project. */
     void openExternalWorkspace();
 
-    /** Opens the system picker granting another app read/write access to the workspace. */
-    default void shareWorkspace() {
-        unavailable();
-    }
-
     /** Applies the project name to the chat header and stores the label setting. */
     void applyProjectLabel(Project project);
 
@@ -96,4 +91,26 @@ public interface PageHost extends cn.lineai.feature.chat.ChatHost {
 
     /** Shows the generic "not available" toast for routes the build does not support. */
     void unavailable();
+
+    /** True when a terminal provider owns the active remote workspace. */
+    @Override default boolean remoteWorkspaceActive() {
+        return graph().terminalWorkspaceActive();
+    }
+
+    /** Loads the terminal provider home on io for the drawer and attachment picker. */
+    @Override default void loadRemoteWorkspaceTree(
+            java.util.function.Consumer<cn.lineai.feature.chat.DrawerPanel.FileNode> callback) {
+        cn.lineai.core.kernel.time.Scheduler scheduler = graph().scheduler();
+        scheduler.io(() -> {
+            String raw;
+            try {
+                raw = graph().listTerminalWorkspace();
+            } catch (RuntimeException error) {
+                raw = "";
+            }
+            String listing = raw;
+            scheduler.main(() -> callback.accept(cn.lineai.feature.chat.ChatSheets.remoteTree(
+                    graph().terminalWorkspaceLabel(), listing)));
+        });
+    }
 }

@@ -9,6 +9,7 @@ import cn.lineai.core.model.Message;
 import cn.lineai.core.model.AgentExtension;
 import cn.lineai.core.model.ChatMode;
 import cn.lineai.core.model.ModelConfig;
+import cn.lineai.core.model.ModelProfile;
 import cn.lineai.core.model.Skill;
 import cn.lineai.core.model.TodoItem;
 import cn.lineai.core.model.UiPreferences;
@@ -200,14 +201,41 @@ final class ChatTurnConfig {
         return out.toString();
     }
 
-    /** Resolves the reasoning spec; models without reasoning support are locked to "off". */
+    /**
+     * Resolves the reasoning spec for one model.
+     *
+     * <p>The level comes from the model's own {@code model.<id>.reasoning} setting, falling back
+     * to the first level of its profile and then to the legacy global preference. Models without
+     * reasoning support are locked to "off". The model's explicit wire field, the family replay
+     * requirement and the wire protocol travel with the spec so the codecs can shape the request
+     * without re-reading configuration.</p>
+     *
+     * @param settings settings store providing the per-model level
+     * @param model selected model; may be null when no model is configured
+     * @return reasoning spec for the request
+     */
     static ReasoningSpec reasoningSpec(SettingsStore settings, ModelConfig model) {
-        // A model without reasoning support is locked to "off" regardless of the stored level.
-        String effort = model != null && !model.supportsReasoning ? "off"
-                : settings.get(UiPreferences.Field.REASONING.key, "medium");
         boolean preserve = Boolean.parseBoolean(
                 settings.get(UiPreferences.Field.PRESERVE_REASONING.key, "false"));
+        if (model == null) {
+            String effort = settings.get(UiPreferences.Field.REASONING.key,
+                    UiPreferences.Field.REASONING.fallback);
+            return new ReasoningSpec("", "", "", effort, preserve);
+        }
+        // A model without reasoning support is locked to "off" regardless of the stored level;
+        // keep the model identity so vendor policies still emit their documented disable shape.
+        if (!model.supportsReasoning) {
+            String provider = model.providerLabel.isEmpty()
+                    ? model.providerId : model.providerLabel;
+            return new ReasoningSpec(model.baseUrl, model.modelId, provider, "off",
+                    new ReasoningSpec.Wire(preserve, "", "off", false, model.protocol));
+        }
+        String value = ModelReasoning.selected(settings, model);
+        String field = model.reasoningField.isEmpty()
+                ? ModelProfile.reasoningField(model.modelId) : model.reasoningField;
         String provider = model.providerLabel.isEmpty() ? model.providerId : model.providerLabel;
-        return new ReasoningSpec(model.baseUrl, model.modelId, provider, effort, preserve);
+        return new ReasoningSpec(model.baseUrl, model.modelId, provider, value,
+                new ReasoningSpec.Wire(preserve, field, value,
+                        ModelProfile.replaysReasoning(model.modelId), model.protocol));
     }
 }

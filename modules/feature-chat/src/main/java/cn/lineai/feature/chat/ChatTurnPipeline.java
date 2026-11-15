@@ -136,9 +136,13 @@ final class ChatTurnPipeline {
                     .times(chat.clock.nowMs(), chat.clock.nowMs())
                     .build();
         }
+        // The engine built the assistant row with the token and timing accounting of its
+        // request; the persisted row must carry the same figures for the transcript statistics.
         final Message finished = current.toBuilder()
                 .blocks(ChatTurnConfig.blocks(streamText, streamReasoning))
                 .toolCalls(message.toolCalls)
+                .tokens(message.inputTokens, message.outputTokens, message.cachedTokens)
+                .timing(message.ttftMs, message.durationMs)
                 .status(Message.Status.COMPLETE)
                 .finishReason(message.toolCalls.isEmpty() ? "stop" : "tool_calls")
                 .times(current.createdAt, chat.clock.nowMs())
@@ -260,11 +264,16 @@ final class ChatTurnPipeline {
         chat.engine = null;
         pendingApprovals = new ArrayList<>();
         String detail = ChatFailure.detail(error);
+        // The transcript row and the toast keep the raw detail; the error log receives the
+        // device, conversation, model and stack context needed to reproduce the failure.
+        String diagnostic = ErrorDiagnostics.format(chat.deviceSummary, chat.clock.nowMs(),
+                chat.conversationId, model, error,
+                android.util.Log.getStackTraceString(error));
         if (chat.errorLogs != null) {
             chat.errorLogs.record(model.displayName(),
-                    error.code().name() + " · " + error.detail(), detail);
+                    error.code().name() + " · " + error.detail(), diagnostic);
         }
-        android.util.Log.e("LineCodeChat", "generation failed: " + detail);
+        android.util.Log.e("LineCodeChat", "generation failed: " + diagnostic);
         boolean created = streamingMessage == null;
         final Message failed = ChatFailure.message(streamingMessage, error, chat.conversationId,
                 chat.seq, detail, chat.clock.nowMs(), model,

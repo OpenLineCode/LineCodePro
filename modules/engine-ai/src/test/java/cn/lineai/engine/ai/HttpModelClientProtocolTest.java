@@ -19,6 +19,7 @@ import java.util.concurrent.atomic.AtomicReference;
 
 import cn.lineai.core.kernel.error.DomainException;
 import cn.lineai.core.kernel.time.Scheduler;
+import cn.lineai.core.model.HttpHeader;
 import cn.lineai.core.model.Message;
 import cn.lineai.core.model.ModelConfig;
 import cn.lineai.core.model.Role;
@@ -29,6 +30,7 @@ import static org.junit.Assert.assertEquals;
 import static org.junit.Assert.assertFalse;
 import static org.junit.Assert.assertNull;
 import static org.junit.Assert.assertTrue;
+import static org.junit.Assert.fail;
 
 public class HttpModelClientProtocolTest {
 
@@ -38,6 +40,8 @@ public class HttpModelClientProtocolTest {
     private final AtomicReference<String> apiKeyHeader = new AtomicReference<>();
     private final AtomicReference<String> anthropicVersion = new AtomicReference<>();
     private final AtomicReference<String> originator = new AtomicReference<>();
+    private final AtomicReference<String> modelHeader = new AtomicReference<>();
+    private final AtomicReference<String> contentType = new AtomicReference<>();
     private final List<String> failures = new ArrayList<>();
     private String sse;
     private int errorStatus = 200;
@@ -58,6 +62,8 @@ public class HttpModelClientProtocolTest {
         apiKeyHeader.set(exchange.getRequestHeaders().getFirst("x-api-key"));
         anthropicVersion.set(exchange.getRequestHeaders().getFirst("anthropic-version"));
         originator.set(exchange.getRequestHeaders().getFirst("originator"));
+        modelHeader.set(exchange.getRequestHeaders().getFirst("X-Model"));
+        contentType.set(exchange.getRequestHeaders().getFirst("Content-Type"));
         try (InputStream input = exchange.getRequestBody()) {
             ByteArrayOutputStream output = new ByteArrayOutputStream();
             byte[] buffer = new byte[4096];
@@ -134,6 +140,122 @@ public class HttpModelClientProtocolTest {
         assertTrue(result.failures.isEmpty());
     }
 
+    @Test public void modelHeadersAreSentAndTransportHeadersAreProtected() {
+        sse = "data: {\"choices\":[{\"delta\":{\"content\":\"hi\"}}]}\n\ndata: [DONE]\n\n";
+        Result result = stream(ModelConfig.Protocol.OPENAI_COMPATIBLE, "k",
+                "http://127.0.0.1:" + server.getAddress().getPort() + "/v1",
+                java.util.Arrays.asList(new HttpHeader("X-Model", "model-value"),
+                        new HttpHeader("content-type", "text/plain")));
+        assertTrue(result.failures.isEmpty());
+        assertEquals("model-value", modelHeader.get());
+        assertEquals("application/json", contentType.get());
+    }
+
+    @Test public void statusFailureCarriesSanitizedDiagnostics() {
+        errorStatus = 500;
+        errorBody = "{\"error\":{\"message\":\"quota exceeded\"}}";
+        Result result = stream(ModelConfig.Protocol.OPENAI_COMPATIBLE, "sk-super-secret-key",
+                "http://127.0.0.1:" + server.getAddress().getPort() + "/v1",
+                java.util.Collections.singletonList(
+                        new HttpHeader("X-Custom", "Bearer leaked-token")));
+        assertEquals(1, result.failures.size());
+        assertTrue(result.detail.contains("endpoint:"));
+        assertTrue(result.detail.contains("protocol: OPENAI_COMPATIBLE"));
+        assertTrue(result.detail.contains("request headers:"));
+        assertTrue(result.detail.contains("Authorization: <redacted>"));
+        assertTrue(result.detail.contains("X-Custom: Bearer <redacted>"));
+        assertFalse(result.detail.contains("sk-super-secret-key"));
+        assertFalse(result.detail.contains("leaked-token"));
+        assertTrue(result.detail.contains("request body:"));
+        assertTrue(result.detail.contains("\"model\":\"model\""));
+        assertTrue(result.detail.contains("response body:"));
+        assertTrue(result.detail.contains("quota exceeded"));
+        assertTrue(result.detail.contains("HTTP 500"));
+        assertTrue(result.detail.contains("stack:"));
+    }
+
+    @Test public void decoderFailureCarriesTheOffendingPayload() {
+        sse = "data: not-json\n\n";
+        Result result = stream(ModelConfig.Protocol.ANTHROPIC_MESSAGES, "k");
+        assertEquals(1, result.failures.size());
+        assertEquals("NETWORK", result.failures.get(0));
+        assertTrue(result.detail.contains("response body:"));
+        assertTrue(result.detail.contains("not-json"));
+        assertTrue(result.detail.contains("stack:"));
+    }
+
+    @Test public void probeFailureCarriesSanitizedDiagnostics() {
+        errorStatus = 401;
+        errorBody = "{\"error\":{\"message\":\"invalid key\"}}";
+        ModelConfig model = ModelConfig.builder().identity("m", "M")
+                .endpoint("p", "model", "http://127.0.0.1:" + server.getAddress().getPort()
+                        + "/v1")
+                .secret("sk-probe-secret")
+                .protocol(ModelConfig.Protocol.OPENAI_COMPATIBLE)
+                .build();
+        try {
+            new ModelProbe().complete(model, "ping");
+            fail("expected a DomainException");
+        } catch (DomainException error) {
+            assertEquals(cn.lineai.core.kernel.error.ErrorCode.NETWORK, error.code());
+            assertTrue(error.detail().contains("request headers:"));
+            assertTrue(error.detail().contains("Authorization: <redacted>"));
+            assertFalse(error.detail().contains("sk-probe-secret"));
+            assertTrue(error.detail().contains("request body:"));
+            assertTrue(error.detail().contains("HTTP 401"));
+            assertTrue(error.detail().contains("response body:"));
+            assertTrue(error.detail().contains("invalid key"));
+            assertTrue(error.detail().contains("stack:"));
+        }
+    }
+
+    @Test public void visionFailureCarriesSanitizedDiagnostics() {
+        errorStatus = 500;
+        errorBody = "vision service down";
+        ModelConfig model = ModelConfig.builder().identity("m", "M")
+                .endpoint("p", "model", "http://127.0.0.1:" + server.getAddress().getPort()
+                        + "/v1")
+                .secret("sk-vision-secret")
+                .protocol(ModelConfig.Protocol.OPENAI_COMPATIBLE)
+                .build();
+        try {
+            new VisionClient().describe(model, "look", "/nonexistent/image.png");
+            fail("expected an IOException");
+        } catch (IOException error) {
+            String message = error.getMessage();
+            assertTrue(message.contains("request headers:"));
+            assertTrue(message.contains("Authorization: <redacted>"));
+            assertFalse(message.contains("sk-vision-secret"));
+            assertTrue(message.contains("request body:"));
+            assertTrue(message.contains("response body:"));
+            assertTrue(message.contains("vision service down"));
+            assertTrue(message.contains("stack:"));
+        }
+    }
+
+    @Test public void imageGenerationFailureCarriesSanitizedDiagnostics() {
+        errorStatus = 500;
+        errorBody = "image service down";
+        ModelConfig model = ModelConfig.builder().identity("m", "M")
+                .endpoint("p", "model", "http://127.0.0.1:" + server.getAddress().getPort()
+                        + "/v1")
+                .secret("sk-image-secret")
+                .protocol(ModelConfig.Protocol.OPENAI_COMPATIBLE)
+                .build();
+        try {
+            new ImageGenerationClient().generate(model, "a cat");
+            fail("expected an IOException");
+        } catch (IOException error) {
+            String message = error.getMessage();
+            assertTrue(message.contains("request headers:"));
+            assertTrue(message.contains("<redacted>"));
+            assertFalse(message.contains("sk-image-secret"));
+            assertTrue(message.contains("response body:"));
+            assertTrue(message.contains("image service down"));
+            assertTrue(message.contains("stack:"));
+        }
+    }
+
     @Test public void cleartextEndpointIsLimitedToExactLoopbackHosts() {
         assertTrue(HttpModelClient.isAllowed("http://localhost:8080/v1"));
         assertTrue(HttpModelClient.isAllowed("http://127.0.0.1/v1"));
@@ -163,12 +285,20 @@ public class HttpModelClientProtocolTest {
     }
 
     private Result stream(ModelConfig.Protocol protocol, String apiKey, String baseUrl) {
-        ModelConfig model = ModelConfig.builder()
+        return stream(protocol, apiKey, baseUrl, null);
+    }
+
+    private Result stream(ModelConfig.Protocol protocol, String apiKey, String baseUrl,
+                          List<HttpHeader> headers) {
+        ModelConfig.Builder builder = ModelConfig.builder()
                 .identity("m", "M")
                 .endpoint("p", "model", baseUrl)
                 .secret(apiKey)
-                .protocol(protocol)
-                .build();
+                .protocol(protocol);
+        if (headers != null) {
+            builder.advanced("", headers);
+        }
+        ModelConfig model = builder.build();
         ChatRequest request = ChatRequest.builder()
                 .model("model")
                 .system("sys")

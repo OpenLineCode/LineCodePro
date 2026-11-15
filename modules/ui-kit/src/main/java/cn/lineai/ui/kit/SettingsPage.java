@@ -27,6 +27,7 @@ public class SettingsPage extends LinearLayout {
     public final LinearLayout content;
     /** Scrolling container around {@link #content}; removed only by frames that embed the page. */
     public final ScrollView scroll;
+    private final ScreenBar bar;
 
     /**
      * Creates a page with only a back action in the header.
@@ -58,7 +59,9 @@ public class SettingsPage extends LinearLayout {
         theme = new ThemeBinder(tokens);
         setOrientation(VERTICAL);
         theme.bind(t -> setBackgroundColor(t.bg));
-        addView(header(title, back, rightIcon, rightDescription, rightAction), new LayoutParams(-1, -2));
+        bar = new ScreenBar(context, theme, title, Icons.CHEVRON_LEFT,
+                R.string.common_back, back, rightIcon, rightDescription, rightAction);
+        addView(bar, new LayoutParams(-1, -2));
         content = new LinearLayout(context);
         content.setOrientation(VERTICAL);
         Ui.padding(content, 0, 0, 0, 100);
@@ -68,11 +71,17 @@ public class SettingsPage extends LinearLayout {
         addView(scroll, new LayoutParams(-1, 0, 1));
     }
 
-    /** Builds the shared header bar; subclasses that need a custom header override the assembly. */
-    private View header(int title, Runnable back, int rightIcon, int rightDescription,
-                        Runnable rightAction) {
-        return new ScreenBar(getContext(), theme, title, Icons.CHEVRON_LEFT,
-                R.string.common_back, back, rightIcon, rightDescription, rightAction);
+    /**
+     * Returns the page header bar.
+     *
+     * <p>Subclasses that need a text action such as Save install it through
+     * {@link ScreenBar#trailingAction(android.view.View)} instead of appending a full-width
+     * button to the scrolling content.</p>
+     *
+     * @return the header bar owned by this page
+     */
+    public final ScreenBar bar() {
+        return bar;
     }
 
     /**

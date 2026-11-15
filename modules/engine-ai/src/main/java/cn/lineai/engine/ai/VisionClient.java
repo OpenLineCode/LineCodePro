@@ -69,7 +69,15 @@ public final class VisionClient {
                 url = ModelCatalogClient.endpoint(model.baseUrl, "/chat/completions");
                 break;
         }
-        String raw = ModelCatalogClient.execute("POST", url, headers, body);
+        Map<String, String> merged = RequestHeaders.merge(headers, model.headers);
+        HttpDiagnostics.Request diagnostic = new HttpDiagnostics.Request(model.protocol,
+                model.baseUrl, url, model.modelId, body);
+        String raw;
+        try {
+            raw = ModelCatalogClient.execute("POST", url, merged, body);
+        } catch (IOException error) {
+            throw new IOException(HttpDiagnostics.format(diagnostic, merged, "", "", error), error);
+        }
         return parse(model, raw);
     }
 

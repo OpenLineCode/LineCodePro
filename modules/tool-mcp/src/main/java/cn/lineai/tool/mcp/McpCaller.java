@@ -2,7 +2,7 @@ package cn.lineai.tool.mcp;
 
 import java.util.List;
 
-import cn.lineai.core.model.McpHeader;
+import cn.lineai.core.model.HttpHeader;
 
 /**
  * Blocking MCP tools/call transport; implemented by the HTTP client.
@@ -22,6 +22,6 @@ public interface McpCaller {
      * @return the tool result text; an MCP-level error starts with {@code "MCP error"}
      * @throws Exception on transport failure, protocol failure or malformed responses
      */
-    String call(String url, List<McpHeader> headers, String toolName, String argumentsJson)
+    String call(String url, List<HttpHeader> headers, String toolName, String argumentsJson)
             throws Exception;
 }

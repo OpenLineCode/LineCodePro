@@ -54,6 +54,11 @@ public final class ToolLoopEngine implements Cancellable {
     private Cancellable generation;
     private StringBuilder text;
     private boolean cancelled;
+    private long requestStartedNanos;
+    private long firstDeltaNanos;
+    private int promptTokens;
+    private int completionTokens;
+    private int cachedTokens;
 
     public ToolLoopEngine(ModelClient client, ToolRegistry tools, ToolContext toolContext,
                           Scheduler scheduler, int maxToolCalls) {
@@ -176,15 +181,27 @@ public final class ToolLoopEngine implements Cancellable {
                 .reasoning(reasoning)
                 .stream(true)
                 .build();
+        requestStartedNanos = System.nanoTime();
+        firstDeltaNanos = 0L;
+        promptTokens = 0;
+        completionTokens = 0;
+        cachedTokens = 0;
         generation = client.stream(model, request, new ModelClient.Listener() {
             @Override public void onEvent(StreamEvent event) {
                 if (event.text.length() > 0) {
+                    markFirstDelta();
                     text.append(event.text);
                     emit(new TimelineEvent.TextDelta(event.text));
                 }
                 if (event.reasoning.length() > 0) {
+                    markFirstDelta();
                     emit(new TimelineEvent.ReasoningDelta(event.reasoning));
                 }
+                // Usage arrives in a separate event (Anthropic) or on the last one (OpenAI);
+                // the largest positive report wins so two-phase accounting stays correct.
+                promptTokens = Math.max(promptTokens, event.promptTokens);
+                completionTokens = Math.max(completionTokens, event.completionTokens);
+                cachedTokens = Math.max(cachedTokens, event.cachedTokens);
                 for (ToolCallDraft draft : event.calls) {
                     merger.accept(draft.index, draft.id, draft.name, draft.arguments);
                 }
@@ -208,9 +225,20 @@ public final class ToolLoopEngine implements Cancellable {
         });
     }
 
+    /** Records the time of the first streamed content delta of the current attempt. */
+    private void markFirstDelta() {
+        if (firstDeltaNanos == 0L) {
+            firstDeltaNanos = System.nanoTime();
+        }
+    }
+
     private void onResponse() {
         if (cancelled) return;
         generation = null;
+        long completedNanos = System.nanoTime();
+        long ttftMs = firstDeltaNanos == 0L ? 0L
+                : Math.max(0L, (firstDeltaNanos - requestStartedNanos) / 1_000_000L);
+        long durationMs = Math.max(0L, (completedNanos - requestStartedNanos) / 1_000_000L);
         List<ToolCall> calls = new ArrayList<>();
         List<ToolCallRecord> records = new ArrayList<>();
         for (ToolCallDraft draft : merger.completed()) {
@@ -224,6 +252,8 @@ public final class ToolLoopEngine implements Cancellable {
                 .status(Message.Status.COMPLETE)
                 .addBlock(ContentBlock.text(text.toString()))
                 .toolCalls(records)
+                .tokens(promptTokens, completionTokens, cachedTokens)
+                .timing(ttftMs, durationMs)
                 .build();
         if (!records.isEmpty()) {
             history.add(assistant);

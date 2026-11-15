@@ -5,7 +5,6 @@ import android.content.ActivityNotFoundException;
 import android.content.Intent;
 import android.net.Uri;
 import android.os.Build;
-import android.provider.DocumentsContract;
 import android.provider.MediaStore;
 import android.widget.Toast;
 
@@ -49,6 +48,10 @@ final class HostActions {
      * @param relativePath path relative to the project root, empty for the root itself
      */
     static void openWorkspaceFile(Activity activity, AppGraph graph, String relativePath) {
+        if (graph.terminalWorkspaceActive()) {
+            openRemoteWorkspaceFile(activity, graph, relativePath);
+            return;
+        }
         Project project = graph.projects().selected();
         if (project == null) {
             Toast.makeText(activity, R.string.drawer_empty_files, Toast.LENGTH_SHORT).show();
@@ -65,20 +68,163 @@ final class HostActions {
                 Toast.makeText(activity, R.string.drawer_empty_files, Toast.LENGTH_SHORT).show();
                 return;
             }
-            Uri uri = WorkspaceFileProvider.uriFor(activity, file);
-            String extension = android.webkit.MimeTypeMap.getFileExtensionFromUrl(file.getName());
-            String mime = extension == null ? null
-                    : android.webkit.MimeTypeMap.getSingleton()
-                            .getMimeTypeFromExtension(extension.toLowerCase(Locale.ROOT));
-            Intent view = new Intent(Intent.ACTION_VIEW)
-                    .setDataAndType(uri, mime == null ? "*/*" : mime)
-                    .addFlags(Intent.FLAG_GRANT_READ_URI_PERMISSION);
-            view.setClipData(android.content.ClipData.newRawUri("", uri));
-            activity.startActivity(Intent.createChooser(view,
-                    activity.getString(R.string.common_open_with)));
+            openFile(activity, file);
         } catch (Exception error) {
             Toast.makeText(activity, R.string.browser_open_failed, Toast.LENGTH_SHORT).show();
         }
+    }
+
+    /**
+     * Downloads one terminal-provider file to the app cache and opens it with the system viewer.
+     *
+     * @param activity activity opening the chooser
+     * @param graph application graph providing the active terminal workspace
+     * @param relativePath provider-home-relative path of the file
+     */
+    static void openRemoteWorkspaceFile(Activity activity, AppGraph graph, String relativePath) {
+        cn.lineai.core.kernel.time.Scheduler scheduler = graph.scheduler();
+        scheduler.io(() -> {
+            try {
+                String text = graph.readTerminalWorkspaceFile(relativePath);
+                File dir = new File(activity.getCacheDir(), "remote-workspace");
+                dir.mkdirs();
+                String name = new File(relativePath).getName();
+                if (name.isEmpty()) name = "file";
+                File file = new File(dir, name);
+                try (java.io.FileWriter writer = new java.io.FileWriter(file)) {
+                    writer.write(text == null ? "" : text);
+                }
+                scheduler.main(() -> openFile(activity, file));
+            } catch (Exception error) {
+                scheduler.main(() -> Toast.makeText(activity,
+                        R.string.browser_open_failed, Toast.LENGTH_SHORT).show());
+            }
+        });
+    }
+
+    /** Opens one existing file through the read-only workspace provider. */
+    private static void openFile(Activity activity, File file) {
+        Uri uri = WorkspaceFileProvider.uriFor(activity, file);
+        String extension = android.webkit.MimeTypeMap.getFileExtensionFromUrl(file.getName());
+        String mime = extension == null ? null
+                : android.webkit.MimeTypeMap.getSingleton()
+                        .getMimeTypeFromExtension(extension.toLowerCase(Locale.ROOT));
+        Intent view = new Intent(Intent.ACTION_VIEW)
+                .setDataAndType(uri, mime == null ? "*/*" : mime)
+                .addFlags(Intent.FLAG_GRANT_READ_URI_PERMISSION);
+        view.setClipData(android.content.ClipData.newRawUri("", uri));
+        activity.startActivity(Intent.createChooser(view,
+                activity.getString(R.string.common_open_with)));
+    }
+
+    /**
+     * Checks the latest GitHub release once per installed version unless the user muted reminders.
+     *
+     * <p>Runs on the io scheduler; a newer release opens the shared update dialog. The checked
+     * version marker keeps activity recreations from repeating the network call, and choosing
+     * Go-to-update clears the mute preference inside the dialog.</p>
+     *
+     * @param activity activity hosting the dialog
+     * @param tokens palette for the dialog
+     * @param graph application graph providing settings and the scheduler
+     * @param openLink callback opening the release page
+     */
+    static void maybeAutoCheckUpdates(Activity activity, Tokens tokens, AppGraph graph,
+                                      java.util.function.Consumer<String> openLink) {
+        String current = cn.lineai.runtime.AppInfo.versionName(activity);
+        String checked = graph.settings().get("update.autoCheckedVersion", "");
+        cn.lineai.feature.settings.UpdatePreferences preferences =
+                new cn.lineai.feature.settings.UpdatePreferences(graph.settings());
+        if (preferences.muted() || current.equals(checked)) return;
+        cn.lineai.core.kernel.time.Scheduler scheduler = graph.scheduler();
+        scheduler.io(() -> {
+            cn.lineai.feature.settings.ReleaseInfo release =
+                    cn.lineai.feature.settings.UpdateChecker.latest();
+            scheduler.main(() -> {
+                graph.settings().put("update.autoCheckedVersion", current);
+                if (release != null && cn.lineai.feature.settings.VersionNumbers
+                        .isNewer(release.version, current)) {
+                    cn.lineai.feature.settings.UpdateDialog.show(activity, tokens, release,
+                            preferences, () -> openLink.accept(release.htmlUrl));
+                }
+            });
+        });
+    }
+
+    /**
+     * Lists the active terminal provider home; blocking, callers use io.
+     *
+     * @param activity activity used for failure strings
+     * @param graph application graph providing the terminal workspace
+     * @param callback tree sink; receives null when listing fails
+     */
+    static void loadRemoteTree(Activity activity, AppGraph graph,
+                               java.util.function.Consumer<
+                                       cn.lineai.feature.chat.DrawerPanel.FileNode> callback) {
+        cn.lineai.core.kernel.time.Scheduler scheduler = graph.scheduler();
+        scheduler.io(() -> {
+            String raw;
+            try {
+                raw = graph.listTerminalWorkspace();
+            } catch (RuntimeException error) {
+                raw = "";
+            }
+            String listing = raw;
+            scheduler.main(() -> callback.accept(cn.lineai.feature.chat.ChatSheets.remoteTree(
+                    graph.terminalWorkspaceLabel(), listing)));
+        });
+    }
+
+    /**
+     * Reads one terminal-provider file into the cache and reports it on the main thread.
+     *
+     * @param activity activity used for the cache directory and failure toast
+     * @param graph application graph providing the terminal workspace
+     * @param relativePath provider-home-relative path of the file
+     * @param onReady sink receiving the cached file on success; failures only toast
+     */
+    static void downloadRemoteFile(Activity activity, AppGraph graph, String relativePath,
+                                   java.util.function.Consumer<File> onReady) {
+        cn.lineai.core.kernel.time.Scheduler scheduler = graph.scheduler();
+        scheduler.io(() -> {
+            try {
+                String text = graph.readTerminalWorkspaceFile(relativePath);
+                File dir = new File(activity.getCacheDir(), "remote-workspace");
+                dir.mkdirs();
+                String name = new File(relativePath).getName();
+                if (name.isEmpty()) name = "file";
+                File file = new File(dir, name);
+                try (java.io.FileWriter writer = new java.io.FileWriter(file)) {
+                    writer.write(text == null ? "" : text);
+                }
+                scheduler.main(() -> onReady.accept(file));
+            } catch (Exception error) {
+                scheduler.main(() -> Toast.makeText(activity,
+                        R.string.browser_open_failed, Toast.LENGTH_SHORT).show());
+            }
+        });
+    }
+
+    /**
+     * Opens the workspace attachment tree, downloading terminal-provider files before toggling.
+     *
+     * @param activity activity used for the cache directory and failure toast
+     * @param graph application graph providing the terminal workspace
+     * @param host chat host used for the attachment sheet
+     * @param view chat view exposing the composer attachment state
+     */
+    static void showAttachmentTree(Activity activity, AppGraph graph,
+                                   cn.lineai.feature.chat.ChatHost host,
+                                   cn.lineai.feature.chat.ChatScreenView view) {
+        cn.lineai.feature.chat.ChatSheets.showAttachmentTree(host,
+                view::fileAttachmentPaths, path -> {
+                    if (!graph.terminalWorkspaceActive()) {
+                        view.toggleFileAttachment(path);
+                        return;
+                    }
+                    downloadRemoteFile(activity, graph, path,
+                            file -> view.toggleFileAttachment(file.getAbsolutePath()));
+                });
     }
 
     /**
@@ -137,26 +283,6 @@ final class HostActions {
             }
         }
         pickDocument(activity, mime, null, requestCode);
-    }
-
-    /** Hands the workspace root to another app with read/write grants. */
-    static void shareWorkspace(Activity activity) {
-        Uri root = DocumentsContract.buildDocumentUri(
-                activity.getPackageName() + ".workspace.documents", "/");
-        Intent intent = new Intent(Intent.ACTION_VIEW);
-        intent.setDataAndType(root, DocumentsContract.Document.MIME_TYPE_DIR);
-        intent.addFlags(Intent.FLAG_GRANT_READ_URI_PERMISSION
-                | Intent.FLAG_GRANT_WRITE_URI_PERMISSION
-                | Intent.FLAG_ACTIVITY_NEW_TASK);
-        try {
-            Intent chooser = Intent.createChooser(intent,
-                    activity.getString(R.string.workspace_provider_open_title));
-            chooser.addFlags(Intent.FLAG_ACTIVITY_NEW_TASK);
-            activity.startActivity(chooser);
-        } catch (ActivityNotFoundException error) {
-            Toast.makeText(activity, R.string.workspace_provider_open_failed,
-                    Toast.LENGTH_LONG).show();
-        }
     }
 
     /**

@@ -18,7 +18,7 @@ import java.util.List;
 
 import cn.lineai.core.kernel.time.Scheduler;
 import cn.lineai.core.model.McpExtension;
-import cn.lineai.core.model.McpHeader;
+import cn.lineai.core.model.HttpHeader;
 import cn.lineai.core.model.McpToolInfo;
 import cn.lineai.engine.ai.McpClient;
 import cn.lineai.ui.i18n.R;
@@ -79,7 +79,7 @@ public final class McpExtensionEditPage extends ExtensionPage {
         this.listener = listener;
         this.scheduler = scheduler;
         this.editing = editing == null ? McpExtension.builder().build() : editing;
-        for (McpHeader header : this.editing.headers) {
+        for (HttpHeader header : this.editing.headers) {
             headerNames.add(header.name);
             headerValues.add(header.value);
         }
@@ -314,7 +314,7 @@ public final class McpExtensionEditPage extends ExtensionPage {
         querying = true;
         renderQuery();
         renderTools();
-        final List<McpHeader> snapshot = headers();
+        final List<HttpHeader> snapshot = headers();
         scheduler.io(() -> {
             try {
                 List<McpToolInfo> found = new McpClient().listTools(endpoint, snapshot);
@@ -357,12 +357,12 @@ public final class McpExtensionEditPage extends ExtensionPage {
     }
 
     /** Assembles non-blank headers from the parallel name/value lists. */
-    private List<McpHeader> headers() {
-        List<McpHeader> result = new ArrayList<>();
+    private List<HttpHeader> headers() {
+        List<HttpHeader> result = new ArrayList<>();
         for (int index = 0; index < headerNames.size(); index++) {
             String key = headerNames.get(index).trim();
             if (key.isEmpty()) continue;
-            result.add(new McpHeader(key, headerValues.get(index)));
+            result.add(new HttpHeader(key, headerValues.get(index)));
         }
         return result;
     }

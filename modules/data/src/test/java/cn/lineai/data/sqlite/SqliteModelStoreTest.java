@@ -2,9 +2,12 @@ package cn.lineai.data.sqlite;
 
 import android.app.Application;
 import cn.lineai.core.kernel.time.Clock;
+import cn.lineai.core.model.HttpHeader;
 import cn.lineai.core.model.ModelConfig;
+import cn.lineai.core.model.ReasoningLevel;
 import java.io.File;
 import java.util.Arrays;
+import java.util.List;
 import org.junit.After;
 import org.junit.Before;
 import org.junit.Rule;
@@ -108,6 +111,43 @@ public class SqliteModelStoreTest {
         models.seedFromSettings(settings);
         assertTrue(models.list().isEmpty());
         assertNull(models.selected());
+    }
+
+    @Test public void advancedSettingsRoundTrip() {
+        List<HttpHeader> headers = Arrays.asList(
+                new HttpHeader("X-Custom", "one"),
+                new HttpHeader("X-Team", "linecode"));
+        List<ReasoningLevel> levels = Arrays.asList(
+                ReasoningLevel.preset(ReasoningLevel.PRESET_LOW),
+                new ReasoningLevel("", "Custom", "custom-value"),
+                ReasoningLevel.preset(ReasoningLevel.PRESET_HIGH));
+
+        models.save(model("m1", "DeepSeek", false).toBuilder()
+                .advanced("reasoning.effort", headers)
+                .reasoningLevels(levels)
+                .build());
+
+        ModelConfig stored = models.find("m1");
+        assertEquals("reasoning.effort", stored.reasoningField);
+        assertEquals(2, stored.headers.size());
+        assertEquals(new HttpHeader("X-Custom", "one"), stored.headers.get(0));
+        assertEquals(new HttpHeader("X-Team", "linecode"), stored.headers.get(1));
+        assertEquals(3, stored.reasoningLevels.size());
+        assertEquals(ReasoningLevel.preset(ReasoningLevel.PRESET_LOW),
+                stored.reasoningLevels.get(0));
+        assertEquals("Custom", stored.reasoningLevels.get(1).label);
+        assertEquals("custom-value", stored.reasoningLevels.get(1).value);
+        assertEquals(ReasoningLevel.preset(ReasoningLevel.PRESET_HIGH),
+                stored.reasoningLevels.get(2));
+        assertEquals(1, models.list().size());
+    }
+
+    @Test public void blankAdvancedSettingsReadBackEmpty() {
+        models.save(model("m1", "DeepSeek", false));
+        ModelConfig stored = models.find("m1");
+        assertEquals("", stored.reasoningField);
+        assertTrue(stored.headers.isEmpty());
+        assertTrue(stored.reasoningLevels.isEmpty());
     }
 
     private static ModelConfig model(String id, String name, boolean isDefault) {

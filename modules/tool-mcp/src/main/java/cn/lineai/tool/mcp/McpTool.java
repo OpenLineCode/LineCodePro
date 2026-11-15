@@ -5,7 +5,7 @@ import org.json.JSONObject;
 import java.util.List;
 
 import cn.lineai.core.model.McpExtension;
-import cn.lineai.core.model.McpHeader;
+import cn.lineai.core.model.HttpHeader;
 import cn.lineai.core.model.McpToolInfo;
 import cn.lineai.tool.api.Tool;
 import cn.lineai.tool.api.ToolContext;
@@ -89,7 +89,7 @@ final class McpTool implements Tool {
      */
     @Override public ToolResult execute(ToolContext context, JSONObject arguments) {
         try {
-            List<McpHeader> headers = server.headers;
+            List<HttpHeader> headers = server.headers;
             String text = caller.call(server.url, headers, remote.name,
                     arguments == null ? "{}" : arguments.toString());
             if (text.startsWith("MCP error")) {

@@ -318,11 +318,6 @@ public final class ChatScreenView extends FrameLayout implements Observable.Obse
             }
 
             @Override
-            public void onSelectAgent(String agentId) {
-                if (host != null) host.onSelectAgent(agentId);
-            }
-
-            @Override
             public void onFileSelected(String path, String name) {
                 if (host != null) host.openFile(path);
             }
@@ -463,11 +458,9 @@ public final class ChatScreenView extends FrameLayout implements Observable.Obse
         refreshVisibleAgents();
     }
 
-    /** Re-renders the agent chip, drawer list and picker for the currently viewed chat. */
+    /** Re-renders the header agent chip and the picker for the currently viewed chat. */
     private void refreshVisibleAgents() {
-        java.util.List<cn.lineai.tool.api.AgentEntry> visible = visibleAgents();
-        drawer.setAgents(visible, currentAgentId());
-        header.setAgentCount(visible.size());
+        header.setAgentCount(visibleAgents().size());
     }
 
     /**

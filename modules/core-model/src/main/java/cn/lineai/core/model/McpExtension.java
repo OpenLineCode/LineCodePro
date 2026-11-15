@@ -11,7 +11,7 @@ public final class McpExtension {
     public final boolean enabled;
     public final String name;
     public final String url;
-    public final List<McpHeader> headers;
+    public final List<HttpHeader> headers;
     public final List<McpToolInfo> tools;
     public final long createdAt;
     public final long updatedAt;
@@ -51,7 +51,7 @@ public final class McpExtension {
         private boolean enabled = true;
         private String name = "";
         private String url = "";
-        private List<McpHeader> headers = new ArrayList<>();
+        private List<HttpHeader> headers = new ArrayList<>();
         private List<McpToolInfo> tools = new ArrayList<>();
         private long createdAt;
         private long updatedAt;
@@ -101,8 +101,8 @@ public final class McpExtension {
          * @param value header list, null yields an empty list
          * @return this builder
          */
-        public Builder headers(List<McpHeader> value) {
-            headers = value == null ? new ArrayList<McpHeader>() : new ArrayList<>(value);
+        public Builder headers(List<HttpHeader> value) {
+            headers = value == null ? new ArrayList<HttpHeader>() : new ArrayList<>(value);
             return this;
         }
 

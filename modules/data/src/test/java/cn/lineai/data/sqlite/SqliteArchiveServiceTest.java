@@ -148,6 +148,71 @@ public class SqliteArchiveServiceTest {
         assertEquals("light", settings(target).get("ui.themeMode", ""));
     }
 
+    @Test public void roundTripsProvidersWithoutApiKeys() throws Exception {
+        SqliteProviderStore providers = new SqliteProviderStore(source, Clock.fixed(1));
+        providers.save(cn.lineai.core.model.ProviderConfig.builder()
+                .id("p1")
+                .name("DeepSeek")
+                .protocol(ModelConfig.Protocol.OPENAI_COMPATIBLE)
+                .endpoint("https://api.deepseek.com", "sk-provider-secret")
+                .headers(java.util.Arrays.asList(
+                        new cn.lineai.core.model.HttpHeader("Authorization", "Bearer x"),
+                        new cn.lineai.core.model.HttpHeader("X-Team", "linecode")))
+                .build());
+        new SqliteModelStore(source).save(ModelConfig.builder().identity("model1", "Mock")
+                .endpoint("p1", "deepseek-chat", "https://api.deepseek.com").build());
+
+        ByteArrayOutputStream bytes = new ByteArrayOutputStream();
+        new SqliteArchiveService(source, Clock.fixed(2)).export(bytes);
+
+        java.util.Map<String, String> entries = zipTexts(bytes.toByteArray());
+        org.json.JSONArray providerRows = new org.json.JSONArray(entries.get("model_providers.json"));
+        assertEquals(1, providerRows.length());
+        assertFalse(providerRows.getJSONObject(0).has("api_key"));
+        assertTrue(providerRows.getJSONObject(0).getString("headers").contains("Authorization"));
+
+        new SqliteArchiveService(target, Clock.fixed(3))
+                .importFrom(new ByteArrayInputStream(bytes.toByteArray()));
+        java.util.List<cn.lineai.core.model.ProviderConfig> imported =
+                new SqliteProviderStore(target, Clock.fixed(4)).list();
+        assertEquals(1, imported.size());
+        assertEquals("DeepSeek", imported.get(0).name);
+        assertEquals("https://api.deepseek.com", imported.get(0).baseUrl);
+        assertEquals("", imported.get(0).apiKey);
+        assertEquals(2, imported.get(0).headers.size());
+        assertEquals("p1", new SqliteModelStore(target).find("model1").providerId);
+    }
+
+    @Test public void importsVersion3ArchiveWithoutProviderTable() throws Exception {
+        new SqliteSettingsStore(source, Clock.fixed(1)).put("k", "v");
+        new SqliteProviderStore(source, Clock.fixed(1)).save(
+                cn.lineai.core.model.ProviderConfig.builder().id("p1").name("DeepSeek")
+                        .endpoint("https://api.deepseek.com", "sk").build());
+        new SqliteModelStore(source).save(ModelConfig.builder().identity("model1", "Mock")
+                .endpoint("p1", "deepseek-chat", "https://api.deepseek.com").build());
+        ByteArrayOutputStream exported = new ByteArrayOutputStream();
+        new SqliteArchiveService(source, Clock.fixed(2)).export(exported);
+        java.util.Map<String, String> texts = zipTexts(exported.toByteArray());
+
+        ByteArrayOutputStream legacy = new ByteArrayOutputStream();
+        java.util.zip.ZipOutputStream zip = new java.util.zip.ZipOutputStream(legacy);
+        addToZip(zip, "manifest.json", "{\"format\":\"linecode-archive\",\"version\":3}");
+        for (java.util.Map.Entry<String, String> entry : texts.entrySet()) {
+            if (entry.getKey().equals("manifest.json")
+                    || entry.getKey().equals("model_providers.json")) {
+                continue;
+            }
+            addToZip(zip, entry.getKey(), entry.getValue());
+        }
+        zip.finish();
+
+        new SqliteArchiveService(target, Clock.fixed(3))
+                .importFrom(new ByteArrayInputStream(legacy.toByteArray()));
+        assertEquals("v", settings(target).get("k", ""));
+        assertTrue(new SqliteProviderStore(target, Clock.fixed(1)).list().isEmpty());
+        assertEquals("p1", new SqliteModelStore(target).find("model1").providerId);
+    }
+
     private static SqliteSettingsStore settings(LineCodeDatabase db) {
         return new SqliteSettingsStore(db, Clock.fixed(1));
     }

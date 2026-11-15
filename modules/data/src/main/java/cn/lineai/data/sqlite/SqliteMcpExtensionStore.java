@@ -13,7 +13,6 @@ import cn.lineai.core.kernel.error.ErrorCode;
 import cn.lineai.core.kernel.time.Clock;
 import cn.lineai.core.kernel.util.Ids;
 import cn.lineai.core.model.McpExtension;
-import cn.lineai.core.model.McpHeader;
 import cn.lineai.core.model.McpToolInfo;
 import cn.lineai.data.api.McpExtensionStore;
 
@@ -51,7 +50,7 @@ public final class SqliteMcpExtensionStore implements McpExtensionStore {
                         .enabled(cursor.getInt(cursor.getColumnIndexOrThrow("enabled")) != 0)
                         .name(text(cursor, "name"))
                         .url(text(cursor, "url"))
-                        .headers(headers(text(cursor, "headers")))
+                        .headers(HeaderCodec.decode(text(cursor, "headers")))
                         .tools(tools(text(cursor, "tools")))
                         .times(cursor.getLong(cursor.getColumnIndexOrThrow("created_at")),
                                 cursor.getLong(cursor.getColumnIndexOrThrow("updated_at")))
@@ -86,7 +85,7 @@ public final class SqliteMcpExtensionStore implements McpExtensionStore {
         values.put("enabled", saved.enabled ? 1 : 0);
         values.put("name", saved.name);
         values.put("url", saved.url);
-        values.put("headers", joinHeaders(saved.headers));
+        values.put("headers", HeaderCodec.encode(saved.headers));
         values.put("tools", joinTools(saved.tools));
         values.put("created_at", saved.createdAt);
         values.put("updated_at", saved.updatedAt);
@@ -128,31 +127,6 @@ public final class SqliteMcpExtensionStore implements McpExtensionStore {
         return cursor.getString(cursor.getColumnIndexOrThrow(column));
     }
 
-    /** Parses the newline/tab-separated column into header pairs, skipping malformed lines. */
-    private static List<McpHeader> headers(String raw) {
-        List<McpHeader> result = new ArrayList<>();
-        if (raw == null) return result;
-        for (String line : raw.split("\n")) {
-            int split = line.indexOf('\t');
-            if (split <= 0) continue;
-            String name = line.substring(0, split).trim();
-            String value = line.substring(split + 1).trim();
-            if (!name.isEmpty()) result.add(new McpHeader(name, value));
-        }
-        return result;
-    }
-
-    /** Encodes header pairs into the newline/tab-separated storage format. */
-    private static String joinHeaders(List<McpHeader> headers) {
-        StringBuilder out = new StringBuilder();
-        for (McpHeader header : headers) {
-            if (header.name.isEmpty()) continue;
-            if (out.length() > 0) out.append('\n');
-            out.append(clean(header.name)).append('\t').append(clean(header.value));
-        }
-        return out.toString();
-    }
-
     /** Parses the four-field tab-separated column back into tool records. */
     private static List<McpToolInfo> tools(String raw) {
         List<McpToolInfo> result = new ArrayList<>();
@@ -173,15 +147,10 @@ public final class SqliteMcpExtensionStore implements McpExtensionStore {
         for (McpToolInfo tool : tools) {
             if (tool.name.isEmpty()) continue;
             if (out.length() > 0) out.append('\n');
-            out.append(clean(tool.name)).append('\t').append(tool.enabled ? '1' : '0')
-                    .append('\t').append(clean(tool.description))
-                    .append('\t').append(clean(tool.inputSchemaJson));
+            out.append(HeaderCodec.clean(tool.name)).append('\t').append(tool.enabled ? '1' : '0')
+                    .append('\t').append(HeaderCodec.clean(tool.description))
+                    .append('\t').append(HeaderCodec.clean(tool.inputSchemaJson));
         }
         return out.toString();
-    }
-
-    /** Replaces tab and newline characters so a value cannot break the record encoding. */
-    private static String clean(String value) {
-        return value == null ? "" : value.replace('\t', ' ').replace('\n', ' ').replace('\r', ' ');
     }
 }

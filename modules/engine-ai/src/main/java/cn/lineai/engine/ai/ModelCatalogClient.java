@@ -19,6 +19,7 @@ import java.util.Map;
 
 import cn.lineai.core.kernel.error.DomainException;
 import cn.lineai.core.kernel.error.ErrorCode;
+import cn.lineai.core.model.HttpHeader;
 import cn.lineai.core.model.ModelConfig;
 
 /**
@@ -45,6 +46,21 @@ public final class ModelCatalogClient {
      * @throws DomainException with {@link ErrorCode#NETWORK} when the request fails
      */
     public List<String> fetch(ModelConfig.Protocol protocol, String baseUrl, String apiKey) {
+        return fetch(protocol, baseUrl, apiKey, null);
+    }
+
+    /**
+     * Fetches the provider's model list, applying model-level headers.
+     *
+     * @param protocol wire protocol deciding headers and endpoint shape
+     * @param baseUrl provider base URL
+     * @param apiKey credential sent as the protocol-appropriate header
+     * @param extraHeaders model-level headers merged over the protocol headers, may be null
+     * @return sorted model identifiers; empty when the provider returns none
+     * @throws DomainException with {@link ErrorCode#NETWORK} when the request fails
+     */
+    public List<String> fetch(ModelConfig.Protocol protocol, String baseUrl, String apiKey,
+                              List<HttpHeader> extraHeaders) {
         try {
             Map<String, String> headers = new LinkedHashMap<>();
             headers.put("Accept", "application/json");
@@ -70,7 +86,7 @@ public final class ModelCatalogClient {
                     url = endpoint(baseUrl, "/models");
                     break;
             }
-            return parse(execute("GET", url, headers, null));
+            return parse(execute("GET", url, RequestHeaders.merge(headers, extraHeaders), null));
         } catch (IOException error) {
             throw new DomainException(ErrorCode.NETWORK, error.getClass().getSimpleName(), error);
         }

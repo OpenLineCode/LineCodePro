@@ -96,6 +96,9 @@ public final class HttpModelClient implements ModelClient {
             return;
         }
         Plan plan = plan(model, request);
+        HttpDiagnostics.Request diagnostic = new HttpDiagnostics.Request(model.protocol,
+                model.baseUrl, plan.url, model.modelId, plan.body);
+        Map<String, String> sentHeaders = sentHeaders(plan.headers);
         HttpURLConnection connection = null;
         try {
             connection = (HttpURLConnection) new URL(plan.url).openConnection();
@@ -115,14 +118,15 @@ public final class HttpModelClient implements ModelClient {
             int status = connection.getResponseCode();
             if (status < 200 || status >= 300) {
                 String errorPayload = readError(connection);
-                String detail = errorPayload.isEmpty()
-                        ? "HTTP " + status : "HTTP " + status + "\n" + errorPayload;
+                String statusLine = "HTTP " + status;
+                String detail = HttpDiagnostics.format(diagnostic, sentHeaders, statusLine,
+                        errorPayload, new IllegalStateException(statusLine));
                 listener.onError(new DomainException(status == 401 || status == 403
-                        ? ErrorCode.AUTH
-                        : ErrorCode.NETWORK, detail));
+                        ? ErrorCode.AUTH : ErrorCode.NETWORK, detail));
                 return;
             }
-            if (!read(connection.getInputStream(), listener, holder, plan.decoder)) {
+            if (!read(connection.getInputStream(), listener, holder, plan.decoder, diagnostic,
+                    sentHeaders)) {
                 return;
             }
             listener.onComplete();
@@ -131,8 +135,7 @@ public final class HttpModelClient implements ModelClient {
                 listener.onError(new DomainException(ErrorCode.CANCELLED, "connection closed"));
             } else {
                 listener.onError(new DomainException(ErrorCode.NETWORK,
-                        error.getMessage() == null ? error.getClass().getSimpleName()
-                                : error.getMessage(), error));
+                        HttpDiagnostics.format(diagnostic, sentHeaders, "", "", error), error));
             }
         } finally {
             if (connection != null) {
@@ -145,27 +148,45 @@ public final class HttpModelClient implements ModelClient {
     private static Plan plan(ModelConfig model, ChatRequest request) {
         Map<String, String> headers = new LinkedHashMap<>();
         headers.put("Accept", "text/event-stream");
+        String url;
+        String body;
+        StreamDecoder decoder;
         switch (model.protocol) {
             case ANTHROPIC_MESSAGES:
                 headers.put("x-api-key", model.apiKey);
                 headers.put("anthropic-version", "2023-06-01");
-                return new Plan(AnthropicCodec.messagesEndpoint(model.baseUrl),
-                        AnthropicCodec.requestBody(request), headers, AnthropicCodec.decoder());
+                url = AnthropicCodec.messagesEndpoint(model.baseUrl);
+                body = AnthropicCodec.requestBody(request);
+                decoder = AnthropicCodec.decoder();
+                break;
             case CODEX_RESPONSES:
                 headers.put("Authorization", "Bearer " + model.apiKey);
                 headers.put("version", CodexCodec.PROTOCOL_VERSION);
                 headers.put("originator", CodexCodec.ORIGINATOR);
                 headers.put("User-Agent", CodexCodec.ORIGINATOR + "/" + CodexCodec.PROTOCOL_VERSION
                         + " (Android; LineCode)");
-                return new Plan(CodexCodec.responsesEndpoint(model.baseUrl),
-                        CodexCodec.requestBody(request, model.baseUrl), headers, CodexCodec.decoder());
+                url = CodexCodec.responsesEndpoint(model.baseUrl);
+                body = CodexCodec.requestBody(request, model.baseUrl);
+                decoder = CodexCodec.decoder();
+                break;
             case OPENAI_COMPATIBLE:
             case LOCAL_GGUF:
             default:
                 headers.put("Authorization", "Bearer " + model.apiKey);
-                return new Plan(OpenAiChatCodec.endpoint(model.baseUrl),
-                        OpenAiChatCodec.requestBody(request), headers, OpenAiChatCodec.decoder());
+                url = OpenAiChatCodec.endpoint(model.baseUrl);
+                body = OpenAiChatCodec.requestBody(request);
+                decoder = OpenAiChatCodec.decoder();
+                break;
         }
+        return new Plan(url, body, RequestHeaders.merge(headers, model.headers), decoder);
+    }
+
+    /** Returns the headers actually sent: the transport content type plus the planned headers. */
+    private static Map<String, String> sentHeaders(Map<String, String> planned) {
+        Map<String, String> headers = new LinkedHashMap<>();
+        headers.put("Content-Type", "application/json");
+        headers.putAll(planned);
+        return headers;
     }
 
     /** Reads the provider's error payload; the status code alone hides the actual reason. */
@@ -194,7 +215,8 @@ public final class HttpModelClient implements ModelClient {
      *         received its terminal callback in both cases
      */
     private boolean read(InputStream input, Listener listener, Connection holder,
-                         StreamDecoder decoder)
+                         StreamDecoder decoder, HttpDiagnostics.Request diagnostic,
+                         Map<String, String> sentHeaders)
             throws IOException {
         SseParser parser = new SseParser();
         try (BufferedReader reader = new BufferedReader(
@@ -204,23 +226,34 @@ public final class HttpModelClient implements ModelClient {
                 if (holder.isCancelled()) {
                     return false;
                 }
-                if (!dispatch(parser.feed(line), decoder, listener)) return false;
+                if (!dispatch(parser.feed(line), decoder, listener, diagnostic, sentHeaders)) {
+                    return false;
+                }
             }
         }
-        return dispatch(parser.finish(), decoder, listener);
+        return dispatch(parser.finish(), decoder, listener, diagnostic, sentHeaders);
     }
 
-    /** Delivers decoded events to the listener; returns false after reporting a decoder failure. */
-    private static boolean dispatch(List<String> payloads, StreamDecoder decoder, Listener listener) {
+    /**
+     * Delivers decoded events to the listener; returns false after reporting a decoder failure.
+     *
+     * <p>The payload that failed to decode is included as the response body of the diagnostic
+     * report, so an unexpected provider event can be reproduced from the error log.</p>
+     */
+    private static boolean dispatch(List<String> payloads, StreamDecoder decoder, Listener listener,
+                                    HttpDiagnostics.Request diagnostic,
+                                    Map<String, String> sentHeaders) {
+        String current = "";
         try {
             for (String payload : payloads) {
+                current = payload;
                 StreamEvent event = decoder.decode(payload);
                 if (event != null && !event.isEmpty()) listener.onEvent(event);
             }
             return true;
         } catch (IllegalStateException error) {
             listener.onError(new DomainException(ErrorCode.NETWORK,
-                    error.getMessage() == null ? "stream error" : error.getMessage()));
+                    HttpDiagnostics.format(diagnostic, sentHeaders, "", current, error), error));
             return false;
         }
     }

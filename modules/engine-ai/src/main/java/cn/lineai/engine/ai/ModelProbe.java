@@ -17,8 +17,9 @@ import cn.lineai.core.model.ModelConfig;
  *
  * <p>The probe is intentionally tiny (64 max tokens, no tools, no reasoning) so that it verifies
  * reachability and credentials without generating real content. Transport failures surface as
- * {@link DomainException} with {@link ErrorCode#NETWORK}; parse problems fall back to the raw
- * body so the user always sees something.</p>
+ * {@link DomainException} with {@link ErrorCode#NETWORK} and carry a desensitized diagnostic
+ * report (endpoint, masked headers, request body, provider body, stack); parse problems fall back
+ * to the raw body so the user always sees something.</p>
  */
 public final class ModelProbe {
 
@@ -63,6 +64,27 @@ public final class ModelProbe {
         }
     }
 
+    /**
+     * Executes one probe request, attaching a desensitized diagnostic report on failure.
+     *
+     * @param model model configuration supplying protocol, base URL and model id
+     * @param url resolved endpoint URL
+     * @param headers headers actually sent, including credentials
+     * @param body serialized request body
+     * @return response body
+     * @throws IOException when the transport fails or the provider rejects the request
+     */
+    private static String send(ModelConfig model, String url, Map<String, String> headers,
+                               String body) throws IOException {
+        HttpDiagnostics.Request request = new HttpDiagnostics.Request(model.protocol,
+                model.baseUrl, url, model.modelId, body);
+        try {
+            return ModelCatalogClient.execute("POST", url, headers, body);
+        } catch (IOException error) {
+            throw new IOException(HttpDiagnostics.format(request, headers, "", "", error), error);
+        }
+    }
+
     /** Sends a non-streaming chat completion and extracts the reply from the choices array. */
     private String openAi(ModelConfig model, String prompt) throws IOException {
         JSONObject body = new JSONObject();
@@ -76,10 +98,10 @@ public final class ModelProbe {
         } catch (JSONException error) {
             throw new IOException("Cannot build request", error);
         }
-        Map<String, String> headers = headers();
+        Map<String, String> headers = headers(model);
         headers.put("Authorization", "Bearer " + model.apiKey);
-        String raw = ModelCatalogClient.execute("POST",
-                OpenAiChatCodecEndpoint.chatCompletions(model.baseUrl), headers, body.toString());
+        String raw = send(model, OpenAiChatCodecEndpoint.chatCompletions(model.baseUrl), headers,
+                body.toString());
         try {
             JSONObject root = new JSONObject(raw);
             JSONArray choices = root.optJSONArray("choices");
@@ -106,11 +128,11 @@ public final class ModelProbe {
         } catch (JSONException error) {
             throw new IOException("Cannot build request", error);
         }
-        Map<String, String> headers = headers();
+        Map<String, String> headers = headers(model);
         headers.put("x-api-key", model.apiKey);
         headers.put("anthropic-version", "2023-06-01");
         String url = cn.lineai.engine.protocol.AnthropicCodec.messagesEndpoint(model.baseUrl);
-        String raw = ModelCatalogClient.execute("POST", url, headers, body.toString());
+        String raw = send(model, url, headers, body.toString());
         try {
             JSONArray content = new JSONObject(raw).optJSONArray("content");
             StringBuilder text = new StringBuilder();
@@ -140,12 +162,12 @@ public final class ModelProbe {
         } catch (JSONException error) {
             throw new IOException("Cannot build request", error);
         }
-        Map<String, String> headers = headers();
+        Map<String, String> headers = headers(model);
         headers.put("Authorization", "Bearer " + model.apiKey);
         headers.put("version", "0.120.0");
         headers.put("originator", "codex_cli_rs");
         String url = ModelCatalogClient.endpoint(model.baseUrl, "/responses");
-        String raw = ModelCatalogClient.execute("POST", url, headers, body.toString());
+        String raw = send(model, url, headers, body.toString());
         try {
             JSONObject root = new JSONObject(raw);
             String text = root.optString("output_text", "");
@@ -167,11 +189,11 @@ public final class ModelProbe {
         }
     }
 
-    /** Returns the header map shared by all probe requests. */
-    private static Map<String, String> headers() {
+    /** Returns the header map shared by all probe requests, with model-level headers applied. */
+    private static Map<String, String> headers(ModelConfig model) {
         Map<String, String> headers = new LinkedHashMap<>();
         headers.put("Accept", "application/json");
-        return headers;
+        return RequestHeaders.merge(headers, model.headers);
     }
 
     /** Resolves the OpenAI-compatible chat completions endpoint for probe requests. */

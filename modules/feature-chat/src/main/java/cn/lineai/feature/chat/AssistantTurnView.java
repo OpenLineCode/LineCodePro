@@ -5,7 +5,10 @@ import android.view.View;
 import android.widget.LinearLayout;
 import android.widget.TextView;
 
+import cn.lineai.core.model.DurationText;
 import cn.lineai.core.model.Message;
+import cn.lineai.core.model.TokenText;
+import cn.lineai.ui.i18n.R;
 import cn.lineai.ui.kit.Ui;
 import cn.lineai.ui.markdown.MarkdownLite;
 import cn.lineai.ui.tokens.Tokens;
@@ -17,10 +20,12 @@ import cn.lineai.ui.tokens.Tokens;
 final class AssistantTurnView extends LinearLayout {
 
     private final ProcessPanel process;
+    private final ReasoningBlockView answerThinking;
     private final TextView error;
     private final MarkdownLite answer;
     private final WorkingStatusView working;
     private final ChangedFilesBlock changes;
+    private final TextView stats;
     private final MessageActionBar actions;
     private Tokens tokens;
     private RowEnv env;
@@ -29,7 +34,10 @@ final class AssistantTurnView extends LinearLayout {
     private boolean live;
     private boolean actionsVisible;
 
-    /** Builds the child stack in render order: process, answer, error, working status, changes. */
+    /**
+     * Builds the child stack in render order: process, answer, error, working status, changes,
+     * the compact statistics line and the action bar.
+     */
     AssistantTurnView(Context context, Tokens tokens) {
         super(context);
         this.tokens = tokens;
@@ -39,6 +47,14 @@ final class AssistantTurnView extends LinearLayout {
         process = new ProcessPanel(context, tokens);
         process.setVisibility(GONE);
         addView(process, new LayoutParams(LayoutParams.MATCH_PARENT,
+                LayoutParams.WRAP_CONTENT));
+
+        // Final-answer reasoning lives on the answer message, not in the process items, so it is
+        // rendered as its own always-above-the-answer disclosure instead of vanishing when the
+        // turn finishes.
+        answerThinking = new ReasoningBlockView(context, tokens);
+        answerThinking.setVisibility(GONE);
+        addView(answerThinking, new LayoutParams(LayoutParams.MATCH_PARENT,
                 LayoutParams.WRAP_CONTENT));
 
         answer = new MarkdownLite(context, tokens);
@@ -65,6 +81,14 @@ final class AssistantTurnView extends LinearLayout {
         changes.setVisibility(GONE);
         addView(changes, new LayoutParams(LayoutParams.MATCH_PARENT,
                 LayoutParams.WRAP_CONTENT));
+
+        stats = Ui.text(context, "", Tokens.FONT_XS, tokens.textTertiary,
+                android.graphics.Typeface.NORMAL);
+        stats.setVisibility(GONE);
+        LayoutParams statsParams = new LayoutParams(LayoutParams.MATCH_PARENT,
+                LayoutParams.WRAP_CONTENT);
+        statsParams.topMargin = Ui.dp(context, 6);
+        addView(stats, statsParams);
 
         actions = new MessageActionBar(context, tokens, false);
         actions.setVisibility(GONE);
@@ -108,9 +132,16 @@ final class AssistantTurnView extends LinearLayout {
         if (hasProcess) {
             process.bind(row, current, rowEnv, row.key);
         }
+        Message answerMessage = row.answer;
+        String answerReasoning = answerMessage == null ? "" : answerMessage.reasoningText();
+        boolean showAnswerThinking = !answerReasoning.isEmpty();
+        answerThinking.setVisibility(showAnswerThinking ? VISIBLE : GONE);
+        if (showAnswerThinking) {
+            answerThinking.bind(answerMessage.id + ":answer-reasoning", answerReasoning,
+                    row.live, rowEnv.preferences.thinkingScroll(), true, rowEnv.disclosure);
+        }
         error.setText(row.error);
         error.setVisibility(row.error.isEmpty() ? GONE : VISIBLE);
-        Message answerMessage = row.answer;
         String text = answerMessage == null ? "" : answerMessage.plainText();
         answer.setVisibility(text.isEmpty() ? GONE : VISIBLE);
         if (!text.isEmpty()) {
@@ -136,17 +167,30 @@ final class AssistantTurnView extends LinearLayout {
         actions.setActions(rowEnv.actions, answerMessage);
         actions.setVisibility(actionsVisible ? VISIBLE : GONE);
         changes.bind(row, current, rowEnv, row.key);
+        bindStats(row);
         applyTokens(current);
+    }
+
+    /** Shows the compact token and duration line once the turn is no longer streaming. */
+    private void bindStats(TurnAssembler.Row row) {
+        boolean visible = !row.live && row.hasStats();
+        if (visible) {
+            stats.setText(getContext().getString(R.string.message_stats_line,
+                    TokenText.format(row.totalTokens), DurationText.format(row.turnDurationMs)));
+        }
+        stats.setVisibility(visible ? VISIBLE : GONE);
     }
 
     /** Applies the current design tokens to every child and re-renders the answer. */
     void applyTokens(Tokens current) {
         tokens = current;
         process.applyTokens(current);
+        answerThinking.applyTokens(current);
         error.setTextColor(current.text);
         answer.render(lastAnswer, current);
         working.applyTokens(current);
         changes.applyTokens(current);
+        stats.setTextColor(current.textTertiary);
         actions.applyTokens(current);
     }
 

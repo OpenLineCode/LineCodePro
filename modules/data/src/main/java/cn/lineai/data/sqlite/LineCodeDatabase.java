@@ -20,7 +20,7 @@ import cn.lineai.core.kernel.error.ErrorCode;
 public final class LineCodeDatabase {
 
     /** Current schema version; bumping it triggers {@link #migrate} on the next open. */
-    public static final int VERSION = 15;
+    public static final int VERSION = 16;
 
     private final File file;
     private SQLiteDatabase database;
@@ -104,6 +104,8 @@ public final class LineCodeDatabase {
         statements.addAll(modelColumnStatements());
         // Same replay pattern for the conversation columns introduced with schema v14.
         statements.addAll(conversationColumnStatements());
+        // And for the message timing columns introduced with schema v16.
+        statements.addAll(messageColumnStatements());
         db.beginTransaction();
         try {
             for (String statement : statements) {
@@ -177,6 +179,8 @@ public final class LineCodeDatabase {
                 + "input_tokens INTEGER NOT NULL DEFAULT 0,"
                 + "output_tokens INTEGER NOT NULL DEFAULT 0,"
                 + "cached_tokens INTEGER NOT NULL DEFAULT 0,"
+                + "ttft_ms INTEGER NOT NULL DEFAULT 0,"
+                + "duration_ms INTEGER NOT NULL DEFAULT 0,"
                 + "created_at INTEGER NOT NULL DEFAULT 0,"
                 + "updated_at INTEGER NOT NULL DEFAULT 0,"
                 + "UNIQUE(conversation_id, seq))");
@@ -200,7 +204,7 @@ public final class LineCodeDatabase {
         return statements;
     }
 
-    /** Settings, model, error log and memory tables with their indexes. */
+    /** Settings, model, provider, error log and memory tables with their indexes. */
     private static List<String> settingsAndModelSchema() {
         List<String> statements = new ArrayList<>();
         statements.add("CREATE TABLE IF NOT EXISTS settings ("
@@ -231,8 +235,20 @@ public final class LineCodeDatabase {
                 + "compression_auto INTEGER NOT NULL DEFAULT 1,"
                 + "compression_model_id TEXT NOT NULL DEFAULT '',"
                 + "local_model_path TEXT NOT NULL DEFAULT '',"
-                + "local_acceleration TEXT NOT NULL DEFAULT 'automatic')");
+                + "local_acceleration TEXT NOT NULL DEFAULT 'automatic',"
+                + "reasoning_levels TEXT NOT NULL DEFAULT '',"
+                + "reasoning_field TEXT NOT NULL DEFAULT '',"
+                + "headers TEXT NOT NULL DEFAULT '')");
         statements.add("CREATE INDEX IF NOT EXISTS idx_models_default ON models(is_default)");
+        statements.add("CREATE TABLE IF NOT EXISTS model_providers ("
+                + "id TEXT PRIMARY KEY,"
+                + "name TEXT NOT NULL DEFAULT '',"
+                + "protocol TEXT NOT NULL DEFAULT 'OPENAI_COMPATIBLE',"
+                + "base_url TEXT NOT NULL DEFAULT '',"
+                + "api_key TEXT NOT NULL DEFAULT '',"
+                + "headers TEXT NOT NULL DEFAULT '',"
+                + "created_at INTEGER NOT NULL DEFAULT 0,"
+                + "updated_at INTEGER NOT NULL DEFAULT 0)");
         statements.add("CREATE TABLE IF NOT EXISTS error_logs ("
                 + "id TEXT PRIMARY KEY,"
                 + "title TEXT NOT NULL DEFAULT '',"
@@ -342,6 +358,17 @@ public final class LineCodeDatabase {
         statements.add("ALTER TABLE models ADD COLUMN local_acceleration TEXT NOT NULL DEFAULT 'automatic'");
         statements.add("ALTER TABLE models ADD COLUMN supports_reasoning INTEGER NOT NULL DEFAULT 1");
         statements.add("ALTER TABLE models ADD COLUMN supports_video INTEGER NOT NULL DEFAULT 0");
+        statements.add("ALTER TABLE models ADD COLUMN reasoning_levels TEXT NOT NULL DEFAULT ''");
+        statements.add("ALTER TABLE models ADD COLUMN reasoning_field TEXT NOT NULL DEFAULT ''");
+        statements.add("ALTER TABLE models ADD COLUMN headers TEXT NOT NULL DEFAULT ''");
+        return statements;
+    }
+
+    /** Adds the per-message timing columns introduced with schema v16. */
+    private static List<String> messageColumnStatements() {
+        List<String> statements = new ArrayList<>();
+        statements.add("ALTER TABLE messages ADD COLUMN ttft_ms INTEGER NOT NULL DEFAULT 0");
+        statements.add("ALTER TABLE messages ADD COLUMN duration_ms INTEGER NOT NULL DEFAULT 0");
         return statements;
     }
 

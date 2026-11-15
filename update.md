@@ -1,5 +1,69 @@
 # Changelog / 更新日志
 
+## v2.2.0
+
+### English
+
+#### Providers and models
+
+- **Provider-based model management** - model settings now start from a provider list instead of a flat model list. A provider owns the protocol, base URL, API key and shared request headers; its models inherit that endpoint. Adding a provider fetches the catalog, formats identifiers into readable names, lets rows be removed or added manually, and saves straight into that provider's model list. Provider-level custom headers apply to every model; model-level headers and an OpenAI-compatible custom reasoning field remain available under the advanced switch.
+- **Automatic capability detection** - a new model profile infers the context window, image input and reasoning presets from the family and version: Claude 5+, GPT-5+, DeepSeek V4+ (V4.1 Flash also images), Kimi K2.7+, GLM 5.2+, Qwen 3.7+, MiniMax M3+ and MiMo 2.5+ default to a 1M context, with Claude/GPT and DeepSeek V4.1 Flash defaulting to image input. Existing models keep their values; the model page offers an explicit re-detect action.
+- **Per-model reasoning levels** - each model carries an editable list of display-label/wire-value reasoning levels, preset by family, extendable with custom rows; forced-thinking families cannot be switched off. The global thinking-depth options were removed from AI behavior and the chat picker now reads the selected model's levels.
+- **Correct provider reasoning fields** - request encoding was aligned with the current provider documentation: Claude 5 uses adaptive thinking plus `output_config.effort` (legacy budget only for Claude 4 and below), Kimi no longer sends a `thinking` object, GLM/DeepSeek/Qwen/MiniMax/MiMo/OpenAI each get their documented fields, NVIDIA gateways stay untouched, and DeepSeek/Kimi/MiMo tool rounds replay `reasoning_content`.
+
+#### Statistics
+
+- **Per-turn usage line** - after a turn finishes, a compact line under the assistant message reports the consumed tokens and the elapsed time (`12.3k`/`1m` token formatting, `8.4s`/`1m 5s` duration formatting).
+- **Conversation stats** - the context-usage sheet became "Conversation stats": context used/limit/percentage, input/output tokens, cache hit rate, average TTFT, TPS and tool-call count.
+- **Statistics settings page** - a new Data & Statistics entry shows total input/output/total tokens, the weighted average cache hit rate and a per-model consumption list.
+
+#### Settings and other
+
+- **Settings information architecture** - the home screen is regrouped into AI & models, Chat experience, Tools & extensions, Workspace, Data & statistics, Security and About; workspace projects, SSH/Termux, terminal providers and the statistics page are now reachable directly.
+- **Workspace and terminal** - the workspace page groups local, SSH and terminal-provider workspaces; selecting a terminal provider application makes its home the remote workspace, persists the choice and shows the provider name in the header. The default workspace label reads "Tap to set workspace" in every language, the "Share with other apps" action was removed, and the terminal provider page links to the LineCode Terminal Extension releases.
+- **Provider editing flow** - creating a provider offers a preset drawer above the base URL, groups its model rows like the MCP custom-header editor with editable model ids, and adds a lightning action that probes every model with the canonical 1+1 request, tinting failed rows red.
+- **Chat and usage fixes** - OpenAI-compatible streaming requests now ask the provider to include usage, so the per-turn token/duration line and the statistics page populate for those providers; Codex-compatible gateways tolerate keep-alive/DONE payloads instead of failing stream parsing; final-answer reasoning renders as its own disclosure directly above the answer instead of vanishing when the turn finishes.
+- **Restart-safe error rows** - the SQLite block decoder now restores ERROR and COMPACT blocks instead of falling back to a diff block, so HTTP/model errors stay visible after leaving and reopening the app.
+- **Failure diagnostics** - model request failures now record the endpoint, every request header with credentials masked, the request body, the provider response body and the stack trace; error log entries prepend the device model, Android release/SDK and app version, and uncaught crash reports also carry that environment header plus a pending-log mirror imported on the next launch.
+- **Update check** - About gains a "Check for updates" entry and the app also checks the latest GitHub release once per installed version when reminders are not muted; a newer release opens a dialog with the changelog, a "Do not remind again" switch and Go-to-update/Cancel actions, and choosing Go-to-update clears the mute preference.
+- **Terminal workspace files** - when a terminal provider owns the workspace, shell and background commands route through the provider (SSH is no longer preferred), and the drawer/attachment tree lists the provider home instead of the SSH or local project path.
+- **Data and tests** - schema v16 adds `model_providers`, model reasoning/header columns and message timing columns; archives are v4 with provider rows and API-key redaction, old archives are upgraded through the provider backfill. New tests cover the profile matrix, token/duration formatting, provider/usage stores, reasoning policies, usage plumbing, chat stats, failure diagnostics, update checking and the new settings pages.
+
+#### Release
+
+- Version `2.2.0` (versionCode 52); both slim and local variants are published by the release workflow.
+
+### 中文
+
+#### 提供商与模型
+
+- **基于提供商的模型管理** - 模型设置首页改为提供商列表，不再平铺模型。提供商持有协议、基础地址、API 密钥与共享请求头，其下模型自动继承端点；新增提供商时拉取模型目录、把标识符格式化为可读名称，可删除或手动添加，保存后直接进入该提供商的模型列表。提供商级自定义请求头对该提供商全部模型生效，模型级请求头与 OpenAI 兼容协议的自定义思考字段保留在「高级」中。
+- **自动能力识别** - 新的模型画像按家族与版本推断上下文、图像输入与默认思考等级：Claude 5+、GPT-5+、DeepSeek V4+（含 V4.1 Flash 图像输入）、Kimi K2.7+、GLM 5.2+、Qwen 3.7+、MiniMax M3+、MiMo 2.5+ 默认 1M 上下文，Claude/GPT 与 DeepSeek V4.1 Flash 默认支持图像输入。已有模型不会被自动覆盖，模型详情提供显式的“重新自动识别”。
+- **按模型的思考等级** - 每个模型维护可编辑的“显示名 / 实际值”思考等级列表，按家族提供预设并支持自定义行；强制思考的家族不能关闭。AI 行为中的全局思考深度设置已删除，聊天思考选择器改为读取当前模型的等级。
+- **修正各提供商推理字段** - 请求编码与当前官方文档对齐：Claude 5 使用 adaptive thinking + `output_config.effort`（仅 Claude 4 及以下保留旧 budget），Kimi 不再发送 `thinking` 对象，GLM/DeepSeek/Qwen/MiniMax/MiMo/OpenAI 使用各自文档字段，NVIDIA 网关保持不注入，DeepSeek/Kimi/MiMo 的工具轮会回传 `reasoning_content`。
+
+#### 统计
+
+- **单轮用量行** - 每轮结束后在助手消息下方小字显示消耗 Token 与耗时（Token 以 `12.3k`/`1m` 显示，耗时以 `8.4s`/`1m 5s` 显示）。
+- **会话统计** - 原上下文占用面板改名为“会话统计”：上下文已用/上限/百分比、输入/输出 Token、缓存命中率、平均 TTFT、TPS 和工具调用数量。
+- **统计设置页** - 新增“数据与统计 → 统计”：总输入/输出/总 Token、加权平均缓存命中率，以及按模型分组的消耗列表。
+
+#### 设置与其他
+
+- **设置信息架构** - 首页重新分组为 AI 与模型、对话体验、工具与扩展、工作区、数据与统计、安全、关于；工作区、SSH/Termux、终端提供者与统计页均可直接进入。
+- **工作区与终端** - 工作区页面分为本地工作区、SSH 工作区和终端提供者三组；选择某个终端提供者应用后，其 home 目录成为远程工作区，选择会被持久化并在标题显示提供商名称。默认工作区标签在所有语言下显示“点击设置工作区”，删除“共享给其他应用”操作，终端提供者页新增前往 LineCode Terminal Extension 发行版的下载入口。
+- **提供商编辑流程** - 新增提供商时在基础地址上方提供预设施抽屉，模型行按 MCP 自定义请求头样式分组并支持编辑模型 ID，同时新增闪电测试按钮，对全部模型执行 1+1 测试并把失败模型名称标红。
+- **聊天与用量修复** - OpenAI 兼容的流式请求现在要求提供商返回 usage，使单轮 Token/耗时行与统计页能正常显示；Codex 兼容网关的保活/[DONE] 负载不再导致流解析失败；最终回答的思考过程改为回答上方独立展开的折叠块，不再在 AI 停止时消失。
+- **错误行重启后保留** - SQLite 内容块解码现在正确还原 ERROR 与 COMPACT 块，不再回退成 diff 块，因此 HTTP/模型错误在退出重进应用后仍然显示。
+- **错误诊断** - 模型请求失败时记录端点、脱敏后的全部请求头、请求体、提供商响应体与堆栈；错误日志条目顶部带设备型号、安卓版本/SDK 与 APP 版本，未捕获崩溃报告也带同样的环境信息，并镜像到 pending log 供下次启动导入。
+- **更新检测** - 关于页新增“检查更新”，且未开启“不再提醒”时每个安装版本自动检查一次 GitHub 最新发行版；更高时弹窗显示更新内容、“不再提醒”开关以及“前往更新/取消”，选择前往更新会清除不再提醒偏好。
+- **终端工作区文件** - 终端提供者作为工作区时，Shell 与后台命令优先走提供者（不再优先 SSH），侧边栏与附件树显示提供者 home 目录而不是 SSH 或本地项目路径。
+- **数据与测试** - 数据库升级到 v16，新增 `model_providers` 表、模型思考/请求头列与消息耗时列；归档升级到 v4，包含提供商行并对 API 密钥脱敏，旧归档导入后自动补齐提供商。新增测试覆盖模型画像矩阵、Token/耗时格式化、提供商/用量存储、推理策略、用量采集、聊天统计、错误诊断、更新检测与新设置页。
+
+#### 发布
+
+- 版本 `2.2.0`（versionCode 52）；发布工作流构建并发布 slim 与 local 两个变体。
+
 ## v2.1.2
 
 ### English

@@ -13,6 +13,7 @@ import cn.lineai.core.model.ToolCallRecord;
 
 import static org.junit.Assert.assertEquals;
 import static org.junit.Assert.assertFalse;
+import static org.junit.Assert.assertNotEquals;
 import static org.junit.Assert.assertNull;
 import static org.junit.Assert.assertTrue;
 
@@ -290,6 +291,65 @@ public class TurnAssemblerTest {
         assertEquals(1, turn.process.size());
         assertEquals(TurnAssembler.ITEM_TOOLS, turn.process.get(0).kind);
         assertEquals("call-9", turn.process.get(0).tools.get(0).callId);
+    }
+
+    @Test
+    public void aggregatesTokenAndTimingStatsOfTheTurn() {
+        Message user = message("u1", Role.USER, Message.Status.COMPLETE, 1L, "go");
+        Message round = assistant("a1", Message.Status.COMPLETE, 2L,
+                blocks("working", "thinking"), tool("call-1", "read_file"))
+                .toBuilder().tokens(100, 20, 40).timing(500L, 1200L).build();
+        Message result = toolResult("t1", "call-1", Message.Status.COMPLETE, "ok");
+        Message round2 = assistant("a2", Message.Status.COMPLETE, 4L, null,
+                tool("call-2", "shell"))
+                .toBuilder().tokens(50, 10, 30).timing(0L, 2000L).build();
+        Message result2 = toolResult("t2", "call-2", Message.Status.COMPLETE, "ok");
+        Message answer = message("a3", Role.ASSISTANT, Message.Status.COMPLETE, 9L, "done")
+                .toBuilder().tokens(20, 5, 0).timing(300L, 900L).build();
+
+        TurnAssembler.Row turn = TurnAssembler.assemble(
+                Arrays.asList(user, round, result, round2, result2, answer),
+                Collections.<String>emptySet(), false, false).get(1);
+
+        assertEquals(170, turn.inputTokens);
+        assertEquals(35, turn.outputTokens);
+        assertEquals(70, turn.cachedTokens);
+        assertEquals(205, turn.totalTokens);
+        assertEquals(500L, turn.ttftMs);
+        assertEquals(4100L, turn.turnDurationMs);
+        assertEquals(2, turn.toolCallCount);
+        assertTrue(turn.hasStats());
+        assertFalse(turn.live);
+    }
+
+    @Test
+    public void liveTurnsHideTheirStatistics() {
+        Message user = message("u1", Role.USER, Message.Status.COMPLETE, 1L, "go");
+        Message streaming = message("a1", Role.ASSISTANT, Message.Status.STREAMING, 2L, "writing")
+                .toBuilder().tokens(10, 5, 2).timing(120L, 400L).build();
+
+        TurnAssembler.Row live = TurnAssembler.assemble(
+                Arrays.asList(user, streaming), Collections.<String>emptySet(), true, false).get(1);
+
+        assertTrue(live.live);
+        assertEquals(0, live.totalTokens);
+        assertFalse(live.hasStats());
+        assertEquals(0L, live.turnDurationMs);
+    }
+
+    @Test
+    public void statisticsArePartOfTheRowSignature() {
+        Message user = message("u1", Role.USER, Message.Status.COMPLETE, 1L, "go");
+        Message first = message("a1", Role.ASSISTANT, Message.Status.COMPLETE, 2L, "done")
+                .toBuilder().tokens(10, 5, 0).timing(100L, 200L).build();
+        Message second = first.toBuilder().tokens(11, 5, 0).build();
+
+        TurnAssembler.Row left = TurnAssembler.assemble(
+                Arrays.asList(user, first), Collections.<String>emptySet(), false, false).get(1);
+        TurnAssembler.Row right = TurnAssembler.assemble(
+                Arrays.asList(user, second), Collections.<String>emptySet(), false, false).get(1);
+
+        assertNotEquals(left.signature, right.signature);
     }
 
     private static Message message(String id, Role role, Message.Status status, long time,

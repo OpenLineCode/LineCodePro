@@ -92,13 +92,13 @@
     <string name="dialog_input_title">Ввод</string>
     <string name="dialog_confirm_title">Подтверждение</string>
 
-    <string name="header_project_default">LineCode</string>
+    <string name="header_project_default">Нажмите, чтобы выбрать рабочую область</string>
 
-    <string name="settings_row_llm_desc">Глубина размышлений, тон, подсказки и сохранение reasoning</string>
+    <string name="settings_row_llm_desc">Тон, подсказки, обучение и отображение рассуждений</string>
     <string name="settings_row_input_desc">Enter отправляет или вставляет новую строку</string>
 
-    <string name="settings_row_models_title">Управление моделями</string>
-    <string name="settings_row_models_desc">Провайдер, ключ, Model ID и модель по умолчанию</string>
+    <string name="settings_row_models_title">Провайдеры моделей</string>
+    <string name="settings_row_models_desc">Провайдеры, ключи, модели и автоопределение</string>
     <string name="settings_row_mcp_title">Инструменты и выполнение</string>
     <string name="settings_row_mcp_desc">Переключатели инструментов рабочей области, выполнение SSH и локальная цель выполнения</string>
     <string name="settings_row_tool_settings_title">Настройки инструментов</string>
@@ -303,10 +303,10 @@
 
     <string name="screen_settings_title">Настройки</string>
     <string name="screen_settings_section_ai">AI и модели</string>
-    <string name="screen_settings_section_tools">Инструменты и выполнение</string>
+    <string name="screen_settings_section_tools">Инструменты и расширения</string>
     <string name="screen_settings_section_ui">UI и вывод</string>
     <string name="screen_settings_section_security">Безопасность</string>
-    <string name="screen_settings_section_data">Данные и система</string>
+    <string name="screen_settings_section_data">Данные и статистика</string>
 
     <string name="screen_security_title">Безопасность</string>
     <string name="screen_security_section_http">HTTP ограничения</string>
@@ -1504,7 +1504,7 @@
     <string name="chat_context_more">Другие действия</string>
     <string name="model_retry_skipped_tools_ran">Сбой связи с моделью: %1$s (повтор не выполнен, так как инструменты уже изменили рабочую область)</string>
     <string name="model_request_stalled">Запрос к модели остановлен: данные не поступали 180 секунд. Можно отправить сообщение повторно.</string>
-    <string name="composer_reasoning_title">Глубина рассуждений</string>
+    <string name="composer_reasoning_title">Рассуждения: %1$s</string>
     <string name="composer_model_picker_subtitle">Применяется к следующим отправленным сообщениям</string>
     <string name="composer_reasoning_picker_subtitle">Насколько модель обдумывает ответ</string>
     <string name="composer_model_picker_empty">Моделей пока нет. Добавьте модель в разделе Настройки → Управление моделями.</string>

@@ -22,6 +22,8 @@ import cn.lineai.data.api.McpExtensionStore;
 import cn.lineai.data.api.ProjectStore;
 import cn.lineai.data.api.MemoryStore;
 import cn.lineai.data.api.ModelStore;
+import cn.lineai.data.api.ProviderStore;
+import cn.lineai.data.api.UsageStatsStore;
 import cn.lineai.data.api.ArchiveService;
 import cn.lineai.data.api.AgentExtensionStore;
 import cn.lineai.data.api.ErrorLogStore;
@@ -39,6 +41,10 @@ import cn.lineai.data.sqlite.SqliteMessageStore;
 import cn.lineai.data.sqlite.SqliteMcpExtensionStore;
 import cn.lineai.data.sqlite.SqliteMemoryStore;
 import cn.lineai.data.sqlite.SqliteModelStore;
+import cn.lineai.data.sqlite.ProviderBackfill;
+import cn.lineai.data.sqlite.ProviderModelStore;
+import cn.lineai.data.sqlite.SqliteProviderStore;
+import cn.lineai.data.sqlite.SqliteUsageStatsStore;
 import cn.lineai.data.sqlite.SqliteProjectStore;
 import cn.lineai.data.sqlite.SqliteAgentExtensionStore;
 import cn.lineai.data.sqlite.SqliteArchiveService;
@@ -94,6 +100,9 @@ public final class AppGraph implements AutoCloseable {
     private final LineCodeDatabase database;
     private final SettingsStore settings;
     private final ModelStore models;
+    private final ModelStore rawModels;
+    private final ProviderStore providers;
+    private final UsageStatsStore usageStats;
     private final StorageStatsStore storageStats;
     private final ErrorLogStore errorLogs;
     private final ArchiveService archives;
@@ -145,8 +154,12 @@ public final class AppGraph implements AutoCloseable {
         final SettingsStore settingsStore = new SqliteSettingsStore(database, clock);
         final ConversationStore conversations = new SqliteConversationStore(database, clock);
         final MessageStore messages = new SqliteMessageStore(database);
-        final ModelStore modelStore = new SqliteModelStore(database);
-        modelStore.seedFromSettings(settingsStore);
+        final ModelStore rawModelStore = new SqliteModelStore(database);
+        rawModelStore.seedFromSettings(settingsStore);
+        final ProviderStore modelProviders = new SqliteProviderStore(database, clock);
+        ProviderBackfill.run(database, modelProviders, rawModelStore);
+        final ModelStore modelStore = new ProviderModelStore(rawModelStore, modelProviders);
+        final UsageStatsStore usageStatsStore = new SqliteUsageStatsStore(database);
         final StorageStatsStore statsStore = new SqliteStorageStatsStore(database,
                 context.getFilesDir());
         final ErrorLogStore errorLogStore = new SqliteErrorLogStore(database, clock);
@@ -164,10 +177,13 @@ public final class AppGraph implements AutoCloseable {
         final LocalModelBridge localBridge = LocalModelBridges.find();
         final ModelClient client = localBridge == null
                 ? httpClient : localBridge.wrap(httpClient, scheduler);
-        final PromptStore promptStore = promptStore(context, settingsStore);
+        final PromptStore promptStore = AppGraphSupport.promptStore(context, settingsStore);
 
         this.settings = settingsStore;
         this.models = modelStore;
+        this.rawModels = rawModelStore;
+        this.providers = modelProviders;
+        this.usageStats = usageStatsStore;
         this.storageStats = statsStore;
         this.errorLogs = errorLogStore;
         this.archives = archiveService;
@@ -185,7 +201,8 @@ public final class AppGraph implements AutoCloseable {
         workspace.mkdirs();
         final ProjectStore projectStore = new SqliteProjectStore(database, clock);
         final DiffStore diffStore = new SqliteDiffStore(database, clock);
-        final Project defaultProject = defaultProject(projectStore, workspace, settingsStore);
+        final Project defaultProject = AppGraphSupport.defaultProject(context, projectStore,
+                workspace, settingsStore);
         this.projects = projectStore;
         this.diffs = diffStore;
         this.conversationStore = conversations;
@@ -193,8 +210,7 @@ public final class AppGraph implements AutoCloseable {
         // workspaces keep the temp-log backend (unless an SSH project is selected).
         this.backgroundShellRegistry = new BackgroundShellRegistry(this::runRemote,
                 terminalProviderGateway.providerBackground(),
-                () -> !SshWorkspace.isSsh(projectStore.selected())
-                        && terminalProviderGateway.terminalMode());
+                terminalProviderGateway::terminalMode);
         final cn.lineai.feature.settings.ToolPreferences toolPreferences =
                 new cn.lineai.feature.settings.ToolPreferences(settingsStore);
         final VisionClient visionClient = new VisionClient();
@@ -230,13 +246,22 @@ public final class AppGraph implements AutoCloseable {
                 client, scheduler, clock, systemPromptAssembler,
                 toolCatalog, toolContext, promptExtensions);
         this.chat.setErrorLogStore(errorLogStore);
+        this.chat.setDeviceSummary(AppGraphSupport.deviceSummary(context));
         this.themePreferences = new cn.lineai.feature.settings.ThemePreferences(settingsStore, scheduler);
-        this.theme = new ThemeController(themePreferences.initial(isNight(context)));
+        this.theme = new ThemeController(themePreferences.initial(
+                AppGraphSupport.isNight(context)));
         this.preferences = new Store<>(new SettingsPresenter(settingsStore), scheduler);
         preferences.dispatch(new SettingsAction.Load());
 
         this.graph = buildGraph(clock, messages);
         terminalProviderGateway.start();
+        if (McpPreferences.MODE_TERMINAL_PROVIDER.equals(mcpPreferences.mode())) {
+            String providerName = terminalProviderGateway.providerName();
+            if (!providerName.isEmpty()) {
+                settingsStore.put(cn.lineai.feature.chat.ChatController.KEY_PROJECT_LABEL,
+                        providerName);
+            }
+        }
     }
 
     /** Registers the instances pages resolve at runtime into the dependency graph. */
@@ -253,22 +278,6 @@ public final class AppGraph implements AutoCloseable {
         builder.instance(ChatController.class, chat);
         builder.instance(ThemeController.class, theme);
         return builder.build();
-    }
-
-    /** Ensures the default workspace project exists and mirrors its name into settings. */
-    private static Project defaultProject(ProjectStore projects, File workspace,
-                                          SettingsStore settingsStore) {
-        Project project = projects.ensureDefault(workspace);
-        settingsStore.put(cn.lineai.feature.chat.ChatController.KEY_PROJECT_LABEL,
-                project.name);
-        return project;
-    }
-
-    /** Prompt store over bundled asset templates with settings-backed overrides. */
-    private static PromptStore promptStore(Context context, SettingsStore settingsStore) {
-        PromptCatalog catalog = new AssetPromptCatalog(
-                path -> context.getAssets().open(path));
-        return new PromptStore(catalog, new SettingsPromptOverrides(settingsStore));
     }
 
     /** Wraps the base catalog with extension agents, then applies workspace policy. */
@@ -341,10 +350,13 @@ public final class AppGraph implements AutoCloseable {
                 return remoteWorkspaceActive();
             }
             @Override public String remoteDirectory() {
+                if (terminalProviderGateway.terminalMode()) {
+                    return terminalProviderGateway.home();
+                }
                 if (SshWorkspace.isSsh(projects.selected())) {
                     return SshWorkspace.directory(projects.selected());
                 }
-                return terminalProviderGateway.terminalMode() ? terminalProviderGateway.home() : "";
+                return "";
             }
             @Override public String remoteExecute(String command, int timeoutMs) {
                 return runRemote(command, timeoutMs);
@@ -377,11 +389,11 @@ public final class AppGraph implements AutoCloseable {
 
     /** One blocking remote execution on the active workspace; shared by tools and background SSH tasks. */
     private String runRemote(String command, int timeoutMs) {
-        if (SshWorkspace.isSsh(projects.selected())) {
-            return SshWorkspace.execute(context, settings, command, timeoutMs);
-        }
         if (terminalProviderGateway.terminalMode()) {
             return terminalProviderGateway.execute(command, timeoutMs);
+        }
+        if (SshWorkspace.isSsh(projects.selected())) {
+            return SshWorkspace.execute(context, settings, command, timeoutMs);
         }
         throw new DomainException(ErrorCode.INVALID_INPUT,
                 "remote execution is unavailable in the local workspace");
@@ -395,12 +407,6 @@ public final class AppGraph implements AutoCloseable {
      */
     public static AppGraph create(Context context) {
         return new AppGraph(context.getApplicationContext());
-    }
-
-    /** Dark configuration check used for the initial theme selection. */
-    private static boolean isNight(Context context) {
-        return (context.getResources().getConfiguration().uiMode
-                & Configuration.UI_MODE_NIGHT_MASK) == Configuration.UI_MODE_NIGHT_YES;
     }
 
     /** Dependency graph resolved by pages and screens. */
@@ -431,6 +437,20 @@ public final class AppGraph implements AutoCloseable {
 
     /** Model configuration store. */
     public ModelStore models() { return models; }
+
+    /** Provider configurations shared by the models of one endpoint. */
+    public ProviderStore providers() { return providers; }
+
+    /** Aggregated token usage read by the statistics settings page. */
+    public UsageStatsStore usageStats() { return usageStats; }
+
+    /**
+     * Rebuilds the provider rows of legacy model rows. Call on an io thread after a data restore;
+     * the backfill is transactional and idempotent.
+     */
+    public void refreshProviders() {
+        ProviderBackfill.run(database, providers, rawModels);
+    }
 
     /** Storage statistics store for the storage management page. */
     public StorageStatsStore storageStats() { return storageStats; }
@@ -486,11 +506,47 @@ public final class AppGraph implements AutoCloseable {
     /** Re-runs provider discovery and reconciles bindings; idempotent. */
     public void refreshTerminalProviders() { terminalProviderGateway.refresh(); }
 
+    /** Selects one terminal provider application as the remote workspace. */
+    public void selectTerminalProvider(String providerId) {
+        terminalProviderGateway.select(providerId);
+    }
+
+    /** Identifier of the terminal provider selected as the workspace, or empty. */
+    public String terminalProviderSelectedId() {
+        return terminalProviderGateway.selectedProviderId();
+    }
+
+    /** Selected terminal provider configuration, or null when no provider is selected. */
+    public cn.lineai.core.model.TerminalProviderConfig selectedTerminalProvider() {
+        return terminalProviderGateway.selectedConfig();
+    }
+
     /** Aggregated provider connection state for settings pages. */
     public int terminalProviderState() { return terminalProviderGateway.state(); }
 
     /** Display name of the active or first enabled provider. */
     public String terminalProviderName() { return terminalProviderGateway.providerName(); }
+
+    /** True when the terminal provider owns the active remote workspace. */
+    public boolean terminalWorkspaceActive() { return terminalProviderGateway.terminalMode(); }
+
+    /** Provider home path of the active terminal workspace; empty when unbound. */
+    public String terminalWorkspacePath() { return terminalProviderGateway.home(); }
+
+    /** Display label of the terminal provider workspace. */
+    public String terminalWorkspaceLabel() {
+        return TerminalWorkspace.label(terminalProviderGateway);
+    }
+
+    /** Lists the active terminal provider home; blocking, callers use io. */
+    public String listTerminalWorkspace() {
+        return TerminalWorkspace.list(terminalProviderGateway);
+    }
+
+    /** Reads one provider-home-relative file; blocking, callers use io. */
+    public String readTerminalWorkspaceFile(String relativePath) {
+        return TerminalWorkspace.read(terminalProviderGateway, relativePath);
+    }
 
     /** Runs the provider probe command; blocking, so callers must use an io thread. */
     public String probeTerminalProvider() { return terminalProviderGateway.probe(); }

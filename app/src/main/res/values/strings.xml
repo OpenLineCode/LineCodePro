@@ -94,13 +94,13 @@
     <string name="dialog_input_title">Input</string>
     <string name="dialog_confirm_title">Confirm</string>
 
-    <string name="header_project_default">LineCode</string>
+    <string name="header_project_default">Tap to set workspace</string>
 
-    <string name="settings_row_llm_desc">Thinking depth, tone, prompts and reasoning preservation</string>
+    <string name="settings_row_llm_desc">Tone, prompts, learning and thinking display</string>
     <string name="settings_row_input_desc">Enter key sends or inserts a newline</string>
 
-    <string name="settings_row_models_title">Model management</string>
-    <string name="settings_row_models_desc">Provider, key, model ID and default model</string>
+    <string name="settings_row_models_title">Model providers</string>
+    <string name="settings_row_models_desc">Providers, keys, models and automatic detection</string>
     <string name="settings_row_mcp_title">Tools &amp; execution</string>
     <string name="settings_row_mcp_desc">Workspace tool toggles, SSH execution and local execution target</string>
     <string name="settings_row_tool_settings_title">Tool settings</string>
@@ -305,10 +305,10 @@
 
     <string name="screen_settings_title">Settings</string>
     <string name="screen_settings_section_ai">AI &amp; Models</string>
-    <string name="screen_settings_section_tools">Tools &amp; Execution</string>
+    <string name="screen_settings_section_tools">Tools &amp; Extensions</string>
     <string name="screen_settings_section_ui">UI &amp; Output</string>
     <string name="screen_settings_section_security">Security</string>
-    <string name="screen_settings_section_data">Data &amp; System</string>
+    <string name="screen_settings_section_data">Data &amp; Statistics</string>
 
     <string name="screen_security_title">Security</string>
     <string name="screen_security_section_http">HTTP restrictions</string>
@@ -328,7 +328,7 @@
     <string name="screen_llm_thinking_high">Deep thinking, suited for complex tasks</string>
     <string name="screen_llm_thinking_max">Maximum thinking, for the hardest problems</string>
     <string name="screen_llm_section_learning">Learning &amp; memory</string>
-    <string name="composer_reasoning_title">Reasoning effort</string>
+    <string name="composer_reasoning_title">%1$s reasoning</string>
     <string name="composer_model_picker_subtitle">Applies to the next messages you send</string>
     <string name="composer_reasoning_picker_subtitle">How much the model thinks before answering</string>
     <string name="composer_model_picker_empty">No models yet. Add one in Settings \u2192 Model management.</string>

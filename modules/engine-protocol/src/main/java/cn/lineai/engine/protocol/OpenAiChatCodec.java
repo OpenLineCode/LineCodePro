@@ -43,8 +43,10 @@ public final class OpenAiChatCodec {
             if (!request.systemPrompt.isEmpty()) {
                 messages.put(message("system", request.systemPrompt));
             }
+            boolean replayReasoning = request.reasoning != null
+                    && request.reasoning.replayReasoning;
             for (Message source : request.messages) {
-                JSONObject item = wireMessage(source);
+                JSONObject item = wireMessage(source, replayReasoning);
                 if (item != null) messages.put(item);
             }
             body.put("messages", messages);
@@ -61,6 +63,9 @@ public final class OpenAiChatCodec {
                 body.put("tools", tools);
                 body.put("tool_choice", "auto");
             }
+            // Streaming usage is opt-in on the chat-completions wire: without this flag most
+            // providers never report prompt/completion tokens and the statistics stay empty.
+            body.put("stream_options", new JSONObject().put("include_usage", true));
             ReasoningPolicy.apply(body, request.reasoning);
             return body.toString();
         } catch (JSONException e) {
@@ -68,8 +73,14 @@ public final class OpenAiChatCodec {
         }
     }
 
-    /** Encodes one message, choosing plain, multipart, tool-result or tool-call wire shape. */
-    private static JSONObject wireMessage(Message source) throws JSONException {
+    /**
+     * Encodes one message, choosing plain, multipart, tool-result or tool-call wire shape.
+     *
+     * <p>When the provider requires replayed reasoning, assistant messages carry the stored
+     * reasoning text as {@code reasoning_content}; tool results never do.</p>
+     */
+    private static JSONObject wireMessage(Message source, boolean replayReasoning)
+            throws JSONException {
         if (source.role == Role.TOOL) {
             return new JSONObject().put("role", "tool")
                     .put("tool_call_id", source.toolCallId)
@@ -81,7 +92,8 @@ public final class OpenAiChatCodec {
         if (source.toolCalls.isEmpty()) {
             java.util.List<String> images = ImageData.paths(source);
             if (images.isEmpty()) {
-                return content.isEmpty() ? null : message(role, content);
+                return content.isEmpty() ? null
+                        : withReasoning(message(role, content), source, replayReasoning);
             }
             JSONArray parts = new JSONArray();
             if (!content.isEmpty()) {
@@ -93,7 +105,9 @@ public final class OpenAiChatCodec {
                 parts.put(new JSONObject().put("type", "image_url")
                         .put("image_url", new JSONObject().put("url", url)));
             }
-            return new JSONObject().put("role", role).put("content", parts);
+            return withReasoning(
+                    new JSONObject().put("role", role).put("content", parts), source,
+                    replayReasoning);
         }
         JSONArray calls = new JSONArray();
         for (cn.lineai.core.model.ToolCallRecord call : source.toolCalls) {
@@ -104,7 +118,18 @@ public final class OpenAiChatCodec {
                             .put("name", call.name)
                             .put("arguments", call.arguments)));
         }
-        return new JSONObject().put("role", role).put("content", content).put("tool_calls", calls);
+        return withReasoning(new JSONObject().put("role", role).put("content", content)
+                .put("tool_calls", calls), source, replayReasoning);
+    }
+
+    /** Adds {@code reasoning_content} to an assistant message when the provider replays it. */
+    private static JSONObject withReasoning(JSONObject item, Message source,
+                                            boolean replayReasoning) throws JSONException {
+        if (!replayReasoning || source.role != Role.ASSISTANT) {
+            return item;
+        }
+        String reasoning = source.reasoningText();
+        return reasoning.isEmpty() ? item : item.put("reasoning_content", reasoning);
     }
 
     /** Creates a simple role/content message object. */
@@ -168,15 +193,21 @@ public final class OpenAiChatCodec {
             }
             int prompt = 0;
             int completion = 0;
+            int cached = 0;
             JSONObject usage = root.optJSONObject("usage");
             if (usage != null) {
                 prompt = usage.optInt("prompt_tokens", 0);
                 completion = usage.optInt("completion_tokens", 0);
+                JSONObject details = usage.optJSONObject("prompt_tokens_details");
+                cached = details == null ? 0 : details.optInt("cached_tokens", 0);
+                if (cached == 0) {
+                    cached = usage.optInt("prompt_cache_hit_tokens", 0);
+                }
             }
             if (calls != null && !calls.isEmpty()) {
-                return StreamEvent.of(text, reasoning, finish, prompt, completion, calls);
+                return StreamEvent.of(text, reasoning, finish, prompt, completion, cached, calls);
             }
-            return StreamEvent.of(text, reasoning, finish, prompt, completion);
+            return StreamEvent.of(text, reasoning, finish, prompt, completion, cached);
         } catch (JSONException e) {
             return null;
         }
