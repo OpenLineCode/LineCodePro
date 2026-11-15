@@ -181,10 +181,11 @@ public final class TurnAssembler {
      * @param messages       transcript ordered by seq
      * @param pendingCallIds tool call ids awaiting approval, used to mark rows pending
      * @param streaming      true while the current turn is still being streamed
+     * @param stepThinking   true to keep a reasoning disclosure for every tool step
      * @return render rows in transcript order; empty when the input is null
      */
     public static List<Row> assemble(List<Message> messages, Set<String> pendingCallIds,
-                                     boolean streaming) {
+                                     boolean streaming, boolean stepThinking) {
         List<Row> rows = new ArrayList<>();
         if (messages == null) {
             return rows;
@@ -206,7 +207,7 @@ public final class TurnAssembler {
                 continue;
             }
             if (message.role == Role.USER) {
-                flush(rows, turn, results, pending, streaming, false);
+                flush(rows, turn, results, pending, streaming, stepThinking, false);
                 Row.Draft draft = new Row.Draft();
                 draft.key = "u:" + message.id;
                 draft.user = true;
@@ -217,14 +218,14 @@ public final class TurnAssembler {
                 turn.add(message);
             }
         }
-        flush(rows, turn, results, pending, streaming, true);
+        flush(rows, turn, results, pending, streaming, stepThinking, true);
         return rows;
     }
 
     /** Emits one assistant row for the accumulated turn and clears it. */
     private static void flush(List<Row> rows, List<Message> turn,
                               Map<String, Message> results, Set<String> pending,
-                              boolean streaming, boolean lastTurn) {
+                              boolean streaming, boolean stepThinking, boolean lastTurn) {
         if (turn.isEmpty()) {
             return;
         }
@@ -250,11 +251,17 @@ public final class TurnAssembler {
             // rendered when it arrives together with an outward prose block and no group is
             // open. Thinking produced between tool calls stays folded inside the group, so a
             // long run of tool calls folds into one group and never leaves an empty block.
+            // Per-step thinking renders that reasoning instead; the open group closes first so
+            // every disclosure still precedes the calls it belongs to.
             boolean hasProse = !isAnswer && !text.trim().isEmpty();
+            boolean hasReasoning = !isAnswer && !reasoning.trim().isEmpty();
             if (hasProse) {
                 flushGroup(process, group);
             }
-            if (!isAnswer && !reasoning.trim().isEmpty() && group.isEmpty() && hasProse) {
+            if (hasReasoning && (hasProse || stepThinking)) {
+                if (!hasProse) {
+                    flushGroup(process, group);
+                }
                 process.add(new Item(ITEM_REASONING, message.id + ":reasoning",
                         reasoning, "", null));
             }

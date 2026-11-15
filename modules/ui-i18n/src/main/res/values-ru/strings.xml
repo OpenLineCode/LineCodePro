@@ -374,6 +374,8 @@
     <string name="screen_llm_scroll_desc">При выключении полностью разворачивает сразу</string>
     <string name="screen_llm_auto_expand_label">Автоматическое разворачивание</string>
     <string name="screen_llm_auto_expand_desc">Автоматически разворачивать при поступлении размышлений</string>
+    <string name="screen_llm_step_thinking_label">Размышления на каждом шаге</string>
+    <string name="screen_llm_step_thinking_desc">Показывать блок размышлений для каждого шага с инструментами, включая последовательные вызовы без текста ответа</string>
     <string name="screen_llm_keep_reasoning_label">Сохранять полный reasoning</string>
     <string name="screen_llm_keep_reasoning_desc">Отправлять исторические размышления обратно совместимым моделям, полезно для многораундовых вызовов инструментов</string>
 
@@ -1598,6 +1600,7 @@
     <string name="chat_process_running">Обработка</string>
     <string name="chat_process_pending">Ожидание подтверждения</string>
     <string name="chat_tools_count">Инструментов использовано: %1$d</string>
+    <string name="chat_tools_step_label">Вызовы инструментов</string>
     <string name="chat_files_changed">Файлов изменено: %1$d</string>
     <string name="chat_review_changes">Просмотр</string>
     <string name="chat_approval_allow_once">Один раз</string>

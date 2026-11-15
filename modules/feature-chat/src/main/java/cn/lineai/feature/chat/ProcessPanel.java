@@ -122,7 +122,14 @@ final class ProcessPanel extends LinearLayout {
         renderItems(row, key);
         for (View child : children.values()) {
             if (child instanceof ReasoningBlockView) {
-                ((ReasoningBlockView) child).setLive(live);
+                ReasoningBlockView block = (ReasoningBlockView) child;
+                block.setLive(live);
+                // The scroll preference can flip while the block is already on screen.
+                block.applyScrollPreference(env.preferences.thinkingScroll());
+            } else if (child instanceof ToolCallGroupView) {
+                // Per-step thinking opens one group per tool round: a single call is the normal
+                // size there, so the header drops the redundant count.
+                ((ToolCallGroupView) child).setPerStepMode(env.preferences.stepThinking());
             }
         }
         applyExpanded();

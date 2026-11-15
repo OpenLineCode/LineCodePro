@@ -57,7 +57,15 @@ model context, or 50% when soft compaction is enabled; the tail boundary never o
 Minimal mode uses a one-sentence role prompt and skips extension, skill and learning sections;
 learning mode injects memories, recent conversation titles, enabled skills and skill paths through
 feature-chat's `LearningContextProvider`. Thinking scroll/auto-expand and process auto-expand
-preferences are applied by `MessageRow`/`toolcall/ToolCallCardView` without recreating views.
+preferences are applied by `MessageRow`/`ProcessPanel`/`toolcall/ToolCallCardView` without
+recreating views (auto-expand resolves the initial open state of incoming blocks only); per-step
+thinking (`ai.stepThinking`) instead changes the assembled process items, so `TimelineView`
+re-assembles the rows when it flips: reasoning between tool rounds becomes a disclosure of its own
+before the calls it led to, call-only rounds still fold into one group, and a one-call group drops
+its header count (`ToolCallGroupView.setPerStepMode`) because a per-step run would otherwise repeat
+"used one tool". The reasoning body scrolls inside the shared `toolcall/BoundedScrollView`, whose
+cap treats an unbounded parent spec as available height: the timeline measures its rows that way,
+and reading the zero size as a bound collapsed an expanded body to nothing.
 
 Timeline events: `ToolLoopEngine` emits one immutable `TimelineEvent` per occurrence
 (TurnStarted, TextDelta, ReasoningDelta, AssistantCompleted, ToolCompleted, NoticeInjected,
