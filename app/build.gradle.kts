@@ -12,7 +12,7 @@ val bundleLocalModel =
     (providers.gradleProperty("linecodeLocalModelBundle").orNull ?: enableLocalModel.toString())
         .toBoolean()
 
-val releaseVersionName = "2.1.1"
+val releaseVersionName = "2.1.2"
 val releaseVariant = if (enableLocalModel) "local" else "slim"
 val releaseApkName = "LineCode Pro $releaseVersionName-$releaseVariant.APK"
 val releaseIdsigName = "$releaseApkName.idsig"
@@ -121,7 +121,7 @@ android {
         applicationId = "cn.lineai"
         minSdk = 26
         targetSdk = 37
-        versionCode = 50
+        versionCode = 51
         versionName = releaseVersionName
     }
 
