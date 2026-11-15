@@ -183,6 +183,17 @@ pipes cannot be drained with a timeout without a reader thread), `platform-andro
   regression introduced while developing the branch and fixed before release): remote users never
   encountered it. Describe shipped behaviour, not development history.
 
+## Pull requests
+
+- Pull request titles, descriptions and commit messages are written in English.
+- Every pull request must keep the CLA acceptance line from
+  `.github/pull_request_template.md` exactly unchanged, tick that box and add the exact
+  `CLA Signature: @<github-login>` line for the pull request author; the required `CLA / verify`
+  check validates both and blocks the merge until they match. Do not restyle, translate or reformat
+  the CLA lines.
+- Fill in the template sections with the shipped user-visible behaviour and the commands actually
+  run; UI changes need before/after screenshots or recordings.
+
 ## Do not / 禁止事项
 
 - Do not resurrect `MainCoordinator`, `ScreenFactories`, `cn.lineai.mvp`, or the legacy
