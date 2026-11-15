@@ -28,6 +28,7 @@ public final class BehaviorSettingsPage extends SettingsPage {
     private final PreferenceRow softCompaction;
     private final PreferenceRow scroll;
     private final PreferenceRow autoExpand;
+    private final PreferenceRow stepThinking;
     private final PreferenceRow preserve;
 
     /**
@@ -81,6 +82,8 @@ public final class BehaviorSettingsPage extends SettingsPage {
                 R.string.screen_llm_scroll_desc, Field.THINKING_SCROLL, true);
         autoExpand = toggle(display, Icons.EXPAND, R.string.screen_llm_auto_expand_label,
                 R.string.screen_llm_auto_expand_desc, Field.THINKING_AUTO_EXPAND, true);
+        stepThinking = toggle(display, Icons.BOXES, R.string.screen_llm_step_thinking_label,
+                R.string.screen_llm_step_thinking_desc, Field.STEP_THINKING, true);
         preserve = toggle(display, Icons.BRAIN, R.string.screen_llm_keep_reasoning_label,
                 R.string.screen_llm_keep_reasoning_desc, Field.PRESERVE_REASONING, false);
     }
@@ -134,8 +137,10 @@ public final class BehaviorSettingsPage extends SettingsPage {
         softCompaction.checked(state.values.softCompaction());
         scroll.checked(state.values.thinkingScroll());
         autoExpand.checked(state.values.thinkingAutoExpand());
+        stepThinking.checked(state.values.stepThinking());
         preserve.checked(state.values.preserveReasoning());
-        for (PreferenceRow row : new PreferenceRow[]{minimal, learning, softCompaction, scroll, autoExpand, preserve}) {
+        for (PreferenceRow row : new PreferenceRow[]{minimal, learning, softCompaction, scroll,
+                autoExpand, stepThinking, preserve}) {
             row.setEnabled(state.loaded);
         }
     }

@@ -24,10 +24,11 @@ import cn.lineai.ui.tokens.Tokens;
 /**
  * Collapsed group of consecutive tool calls (legacy {@code ToolTimelineGroup}).
  *
- * <p>Collapsed it is a single 48dp row: terminal glyph, {@code Used N tools} and a chevron.
- * Expanded it lists one {@link ToolCallCardView} per call with a 2dp gap, so a run of calls reads
- * as one continuous list instead of separate cards. The timeline owns the disclosure state so a
- * rebind never loses what the user opened.</p>
+ * <p>Collapsed it is a single 48dp row: terminal glyph, {@code Used N tools} and a chevron. In
+ * per-step mode a one-call group shows the plain label instead, because the count would repeat
+ * itself on every round. Expanded it lists one {@link ToolCallCardView} per call with a 2dp gap,
+ * so a run of calls reads as one continuous list instead of separate cards. The timeline owns the
+ * disclosure state so a rebind never loses what the user opened.</p>
  */
 public class ToolCallGroupView extends LinearLayout {
 
@@ -46,6 +47,7 @@ public class ToolCallGroupView extends LinearLayout {
     private List<ToolCallEntry> entries = Collections.emptyList();
     private boolean expanded;
     private boolean running;
+    private boolean perStep;
 
     /** Builds the clickable 48dp header row and the hidden card container. */
     public ToolCallGroupView(Context context, Tokens tokens) {
@@ -112,7 +114,7 @@ public class ToolCallGroupView extends LinearLayout {
     }
 
     /**
-     * Rebinds the group: syncs the card list with the entries, refreshes the count label and
+     * Rebinds the group: syncs the card list with the entries, refreshes the header label and
      * applies the expansion.
      *
      * @param values  entries of one consecutive tool run
@@ -123,10 +125,31 @@ public class ToolCallGroupView extends LinearLayout {
         tokens = current;
         entries = values == null ? Collections.<ToolCallEntry>emptyList() : values;
         running = active;
-        label.setText(getContext().getString(R.string.chat_tools_count, entries.size()));
+        updateLabel();
         syncCards();
         applyTokens(current);
         applyExpanded();
+    }
+
+    /**
+     * Marks the group as one round of the per-step thinking view.
+     *
+     * <p>A single call is the normal size there, so the header shows the plain label instead of
+     * repeating the count; a parallel batch keeps its count because that number is informative.</p>
+     *
+     * @param value true when groups render one tool round each
+     */
+    public void setPerStepMode(boolean value) {
+        if (perStep == value) return;
+        perStep = value;
+        updateLabel();
+    }
+
+    /** Refreshes the collapsed header text from the call count and the per-step mode. */
+    private void updateLabel() {
+        label.setText(perStep && entries.size() <= 1
+                ? getContext().getString(R.string.chat_tools_step_label)
+                : getContext().getString(R.string.chat_tools_count, entries.size()));
     }
 
     /** Applies tokens to the header and every card without rebuilding. */

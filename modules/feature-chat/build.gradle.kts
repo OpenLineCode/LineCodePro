@@ -23,4 +23,7 @@ dependencies {
     implementation(project(":data"))
     implementation(project(":tool-api"))
     testImplementation("junit:junit:4.13.2")
+    testImplementation(libs.robolectric)
 }
+
+android.testOptions.unitTests.isIncludeAndroidResources = true

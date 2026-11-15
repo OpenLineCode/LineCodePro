@@ -30,7 +30,7 @@ public class TurnAssemblerTest {
 
         List<TurnAssembler.Row> rows = TurnAssembler.assemble(
                 Arrays.asList(user, assistant, result1, result2, finalAnswer),
-                Collections.<String>emptySet(), false);
+                Collections.<String>emptySet(), false, false);
 
         assertEquals(2, rows.size());
         assertTrue(rows.get(0).user);
@@ -69,7 +69,7 @@ public class TurnAssemblerTest {
 
         TurnAssembler.Row turn = TurnAssembler.assemble(
                 Arrays.asList(user, round1, tool1, round2, tool2, round3, tool3, answer),
-                Collections.<String>emptySet(), false).get(1);
+                Collections.<String>emptySet(), false, false).get(1);
 
         // Same shape as the legacy ConversationTimeline: [thinking][prose][one tool group].
         assertEquals(3, turn.process.size());
@@ -82,12 +82,68 @@ public class TurnAssemblerTest {
     }
 
     @Test
+    public void stepThinkingKeepsReasoningBeforeEveryToolRound() {
+        Message user = message("u1", Role.USER, Message.Status.COMPLETE, 1L, "go");
+        Message round1 = assistant("a1", Message.Status.COMPLETE, 2L,
+                blocks("round one", "thinking one"), tool("call-1", "read_file"));
+        Message tool1 = toolResult("t1", "call-1", Message.Status.COMPLETE, "ok");
+        Message round2 = assistant("a2", Message.Status.COMPLETE, 4L,
+                Arrays.asList(ContentBlock.reasoning("thinking two")), tool("call-2", "shell"));
+        Message tool2 = toolResult("t2", "call-2", Message.Status.COMPLETE, "ok");
+        Message round3 = assistant("a3", Message.Status.COMPLETE, 6L,
+                Arrays.asList(ContentBlock.reasoning("thinking three")), tool("call-3", "glob"));
+        Message tool3 = toolResult("t3", "call-3", Message.Status.COMPLETE, "*.java");
+        Message answer = message("a4", Role.ASSISTANT, Message.Status.COMPLETE, 9L, "done");
+
+        TurnAssembler.Row turn = TurnAssembler.assemble(
+                Arrays.asList(user, round1, tool1, round2, tool2, round3, tool3, answer),
+                Collections.<String>emptySet(), false, true).get(1);
+
+        // Every round keeps its own disclosure: [thinking][prose][tools] then two
+        // [thinking][tools] pairs, so no step hides the reasoning that led to it.
+        assertEquals(7, turn.process.size());
+        assertEquals(TurnAssembler.ITEM_REASONING, turn.process.get(0).kind);
+        assertEquals("thinking one", turn.process.get(0).text);
+        assertEquals(TurnAssembler.ITEM_MARKDOWN, turn.process.get(1).kind);
+        assertEquals(TurnAssembler.ITEM_TOOLS, turn.process.get(2).kind);
+        assertEquals("call-1", turn.process.get(2).tools.get(0).callId);
+        assertEquals(TurnAssembler.ITEM_REASONING, turn.process.get(3).kind);
+        assertEquals("thinking two", turn.process.get(3).text);
+        assertEquals(TurnAssembler.ITEM_TOOLS, turn.process.get(4).kind);
+        assertEquals("call-2", turn.process.get(4).tools.get(0).callId);
+        assertEquals(TurnAssembler.ITEM_REASONING, turn.process.get(5).kind);
+        assertEquals("thinking three", turn.process.get(5).text);
+        assertEquals(TurnAssembler.ITEM_TOOLS, turn.process.get(6).kind);
+        assertEquals("call-3", turn.process.get(6).tools.get(0).callId);
+    }
+
+    @Test
+    public void stepThinkingKeepsCallOnlyRoundsInOneGroup() {
+        Message user = message("u1", Role.USER, Message.Status.COMPLETE, 1L, "go");
+        Message round1 = assistant("a1", Message.Status.COMPLETE, 2L, null,
+                tool("call-1", "read_file"));
+        Message tool1 = toolResult("t1", "call-1", Message.Status.COMPLETE, "ok");
+        Message round2 = assistant("a2", Message.Status.COMPLETE, 4L, null,
+                tool("call-2", "shell"));
+        Message tool2 = toolResult("t2", "call-2", Message.Status.COMPLETE, "ok");
+        Message answer = message("a3", Role.ASSISTANT, Message.Status.COMPLETE, 9L, "done");
+
+        TurnAssembler.Row turn = TurnAssembler.assemble(
+                Arrays.asList(user, round1, tool1, round2, tool2, answer),
+                Collections.<String>emptySet(), false, true).get(1);
+
+        assertEquals(1, turn.process.size());
+        assertEquals(TurnAssembler.ITEM_TOOLS, turn.process.get(0).kind);
+        assertEquals(2, turn.process.get(0).tools.size());
+    }
+
+    @Test
     public void marksUnpairedLiveCallsRunningAndPendingOnesAwaiting() {
         Message user = message("u1", Role.USER, Message.Status.COMPLETE, 1L, "go");
         Message assistant = assistant("a1", Message.Status.COMPLETE, 2L, null,
                 tool("call-1", "write_file"));
         List<TurnAssembler.Row> rows = TurnAssembler.assemble(
-                Arrays.asList(user, assistant), Collections.singleton("call-1"), true);
+                Arrays.asList(user, assistant), Collections.singleton("call-1"), true, false);
 
         TurnAssembler.Row turn = rows.get(1);
         assertTrue(turn.live);
@@ -111,7 +167,7 @@ public class TurnAssemblerTest {
 
         TurnAssembler.Row turn = TurnAssembler.assemble(
                 Arrays.asList(user, assistant, result),
-                Collections.<String>emptySet(), false).get(1);
+                Collections.<String>emptySet(), false, false).get(1);
         TurnAssembler.Item tools = turn.process.get(0);
         assertEquals("diff-9", tools.tools.get(0).diffId);
         assertEquals("pending", tools.tools.get(0).reviewState);
@@ -123,7 +179,7 @@ public class TurnAssemblerTest {
         Message streaming = message("a1", Role.ASSISTANT, Message.Status.STREAMING, 2L,
                 "Let me read the file first.");
         TurnAssembler.Row live = TurnAssembler.assemble(
-                Arrays.asList(user, streaming), Collections.<String>emptySet(), true).get(1);
+                Arrays.asList(user, streaming), Collections.<String>emptySet(), true, false).get(1);
 
         assertNull(live.answer);
         assertEquals(1, live.process.size());
@@ -132,7 +188,7 @@ public class TurnAssemblerTest {
 
         Message complete = streaming.toBuilder().status(Message.Status.COMPLETE).build();
         TurnAssembler.Row done = TurnAssembler.assemble(
-                Arrays.asList(user, complete), Collections.<String>emptySet(), true).get(1);
+                Arrays.asList(user, complete), Collections.<String>emptySet(), true, false).get(1);
         assertEquals("Let me read the file first.", done.answer.plainText());
         assertTrue(done.process.isEmpty());
     }
@@ -146,7 +202,7 @@ public class TurnAssemblerTest {
                 .addBlock(ContentBlock.compact("complete")).times(3L, 3L).build();
 
         TurnAssembler.Row turn = TurnAssembler.assemble(
-                Arrays.asList(user, answer, marker), Collections.<String>emptySet(), false).get(1);
+                Arrays.asList(user, answer, marker), Collections.<String>emptySet(), false, false).get(1);
         assertEquals("done", turn.answer.plainText());
         assertEquals(1, turn.process.size());
         assertEquals(TurnAssembler.ITEM_COMPACT, turn.process.get(0).kind);
@@ -159,7 +215,7 @@ public class TurnAssemblerTest {
         Message failed = message("a1", Role.ASSISTANT, Message.Status.FAILED, 2L,
                 "Generation failed: timeout");
         List<TurnAssembler.Row> rows = TurnAssembler.assemble(
-                Arrays.asList(user, failed), Collections.<String>emptySet(), false);
+                Arrays.asList(user, failed), Collections.<String>emptySet(), false, false);
 
         TurnAssembler.Row turn = rows.get(1);
         assertEquals("Generation failed: timeout", turn.answer.plainText());
@@ -174,7 +230,7 @@ public class TurnAssemblerTest {
                 .addBlock(ContentBlock.error("Connection timed out"))
                 .times(2L, 2L).build();
         TurnAssembler.Row turn = TurnAssembler.assemble(
-                Arrays.asList(user, failed), Collections.<String>emptySet(), false).get(1);
+                Arrays.asList(user, failed), Collections.<String>emptySet(), false, false).get(1);
 
         assertEquals("Connection timed out", turn.error);
         assertNull(turn.answer);
@@ -190,7 +246,7 @@ public class TurnAssemblerTest {
                 .addBlock(ContentBlock.error("Connection timed out"))
                 .times(2L, 2L).build();
         TurnAssembler.Row turn = TurnAssembler.assemble(
-                Arrays.asList(user, failed), Collections.<String>emptySet(), false).get(1);
+                Arrays.asList(user, failed), Collections.<String>emptySet(), false, false).get(1);
 
         assertEquals("Partial **body**", turn.answer.plainText());
         assertEquals("Connection timed out", turn.error);
@@ -204,7 +260,7 @@ public class TurnAssemblerTest {
         List<TurnAssembler.Row> rows = TurnAssembler.assemble(
                 Arrays.asList(user, hidden.toBuilder().visibility(Message.Visibility.HIDDEN).build(),
                         tool),
-                Collections.<String>emptySet(), false);
+                Collections.<String>emptySet(), false, false);
         assertEquals(1, rows.size());
         assertTrue(rows.get(0).user);
     }
@@ -225,7 +281,7 @@ public class TurnAssemblerTest {
         List<TurnAssembler.Row> rows = TurnAssembler.assemble(
                 Arrays.asList(message("u1", Role.USER, Message.Status.COMPLETE, 1L, "go"),
                         firstAnswer, notice, continued, tool),
-                Collections.<String>emptySet(), false);
+                Collections.<String>emptySet(), false, false);
 
         assertEquals(2, rows.size());
         assertTrue(rows.get(0).user);

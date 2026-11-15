@@ -17,6 +17,7 @@ public final class UiPreferences {
         REASONING("ai.reasoning", "medium", "off", "auto", "low", "high", "max"),
         THINKING_SCROLL("ai.thinkingScroll", "true", "false"),
         THINKING_AUTO_EXPAND("ai.thinkingAutoExpand", "false", "true"),
+        STEP_THINKING("ai.stepThinking", "false", "true"),
         PRESERVE_REASONING("ai.preserveReasoning", "false", "true"),
         LEARNING_MODE("ai.learningMode", "false", "true"),
         SOFT_COMPACTION("ai.softCompaction", "true", "false"),
@@ -119,6 +120,8 @@ public final class UiPreferences {
     public boolean thinkingScroll() { return booleanOf(Field.THINKING_SCROLL); }
     /** Returns whether reasoning panes start expanded. */
     public boolean thinkingAutoExpand() { return booleanOf(Field.THINKING_AUTO_EXPAND); }
+    /** Returns whether every tool step keeps its own reasoning disclosure. */
+    public boolean stepThinking() { return booleanOf(Field.STEP_THINKING); }
     /** Returns whether reasoning survives into follow-up requests. */
     public boolean preserveReasoning() { return booleanOf(Field.PRESERVE_REASONING); }
     /** Returns whether learning-mode explanations are enabled. */

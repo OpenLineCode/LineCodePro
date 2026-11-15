@@ -67,6 +67,7 @@ public final class TimelineView extends FrameLayout implements SelectionHost {
     private cn.lineai.feature.chat.toolcall.ToolDiffLookup diffLookup;
     private boolean multiSelect;
     private List<TurnAssembler.Row> current = new ArrayList<>();
+    private ChatState lastState;
 
     /** Builds the scroll column, empty state and jump-to-bottom affordance. */
     public TimelineView(Context context, Tokens tokens) {
@@ -140,11 +141,21 @@ public final class TimelineView extends FrameLayout implements SelectionHost {
         rebindAll();
     }
 
-    /** Replaces display preferences and the markdown link handler, then rebinds all rows. */
+    /**
+     * Replaces display preferences and the markdown link handler. Rows whose process structure
+     * depends on a flipped preference are re-assembled; the rest are only rebound in place.
+     */
     public void preferences(UiPreferences values, Consumer<String> linkHandler) {
-        preferences = values == null ? UiPreferences.defaults() : values;
+        UiPreferences next = values == null ? UiPreferences.defaults() : values;
+        boolean stepThinkingChanged = next.stepThinking() != preferences.stepThinking();
+        preferences = next;
         links = linkHandler;
-        rebindAll();
+        if (stepThinkingChanged && lastState != null) {
+            // Per-step thinking changes which process items exist, so the rows must be rebuilt.
+            render(lastState, tokens);
+        } else {
+            rebindAll();
+        }
     }
 
     /**
@@ -155,8 +166,9 @@ public final class TimelineView extends FrameLayout implements SelectionHost {
         if (current != tokens) {
             applyTokens(current);
         }
+        lastState = state;
         List<TurnAssembler.Row> next = TurnAssembler.assemble(state.messages,
-                pendingCallIds(state), state.streaming);
+                pendingCallIds(state), state.streaming, preferences.stepThinking());
         this.current = next;
         renderingEmpty = next.isEmpty();
         emptyState.setVisibility(renderingEmpty ? VISIBLE : GONE);

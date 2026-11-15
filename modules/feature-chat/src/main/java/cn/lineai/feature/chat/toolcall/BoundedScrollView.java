@@ -10,25 +10,44 @@ import android.widget.ScrollView;
  * Scroll view capped at a maximum height that also hands the vertical gesture back to the outer
  * timeline once its own content reaches the edge (port of the legacy {@code BoundedScrollView}).
  */
-final class BoundedScrollView extends ScrollView {
+public final class BoundedScrollView extends ScrollView {
 
-    private final int maxHeightPx;
+    private int maxHeightPx;
     private float lastTouchY;
 
     /** @param context    hosting context
      * @param maxHeightDp hard height cap in dp; non-positive disables the cap */
-    BoundedScrollView(Context context, int maxHeightDp) {
+    public BoundedScrollView(Context context, int maxHeightDp) {
         super(context);
-        this.maxHeightPx = maxHeightDp <= 0 ? 0
-                : Math.round(maxHeightDp * context.getResources().getDisplayMetrics().density);
         setFillViewport(false);
         setVerticalScrollBarEnabled(true);
+        setMaxHeightDp(maxHeightDp);
     }
 
-    /** Caps the measured height at the configured maximum. */
+    /**
+     * Updates the hard height cap.
+     *
+     * @param maxHeightDp cap in dp; non-positive disables the cap
+     */
+    public void setMaxHeightDp(int maxHeightDp) {
+        int px = maxHeightDp <= 0 ? 0
+                : Math.round(maxHeightDp * getResources().getDisplayMetrics().density);
+        if (px == maxHeightPx) {
+            return;
+        }
+        maxHeightPx = px;
+        requestLayout();
+    }
+
+    /**
+     * Caps the measured height at the configured maximum.
+     *
+     * <p>An unbounded parent spec is a permission to grow, not a zero-dp bound: the cap becomes
+     * the available height so a scrollable body still measures inside a scrolling timeline.</p>
+     */
     @Override
     protected void onMeasure(int widthMeasureSpec, int heightMeasureSpec) {
-        if (maxHeightPx > 0) {
+        if (maxHeightPx > 0 && MeasureSpec.getMode(heightMeasureSpec) != MeasureSpec.EXACTLY) {
             int mode = MeasureSpec.getMode(heightMeasureSpec);
             int size = MeasureSpec.getSize(heightMeasureSpec);
             int capped = mode == MeasureSpec.UNSPECIFIED

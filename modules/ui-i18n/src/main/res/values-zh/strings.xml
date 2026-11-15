@@ -388,6 +388,8 @@
     <string name="screen_llm_scroll_desc">关闭后直接完全展开显示</string>
     <string name="screen_llm_auto_expand_label">自动展开</string>
     <string name="screen_llm_auto_expand_desc">收到思考内容时自动展开</string>
+    <string name="screen_llm_step_thinking_label">逐步显示思考</string>
+    <string name="screen_llm_step_thinking_desc">连续工具调用之间没有正文时，也为每一次工具调用显示思考折叠框</string>
     <string name="screen_llm_keep_reasoning_label">保留完整 reasoning</string>
     <string name="screen_llm_keep_reasoning_desc">将历史思考发回兼容模型，适合多轮工具调用</string>
 
@@ -1619,6 +1621,7 @@
     <string name="chat_process_running">正在处理</string>
     <string name="chat_process_pending">等待确认</string>
     <string name="chat_tools_count">使用了 %1$d 个工具</string>
+    <string name="chat_tools_step_label">工具调用</string>
     <string name="chat_files_changed">已编辑 %1$d 个文件</string>
     <string name="chat_review_changes">审阅</string>
     <string name="chat_approval_allow_once">允许一次</string>

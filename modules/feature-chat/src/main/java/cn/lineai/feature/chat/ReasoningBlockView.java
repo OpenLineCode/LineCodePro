@@ -4,9 +4,9 @@ import android.content.Context;
 import android.graphics.Typeface;
 import android.view.Gravity;
 import android.widget.LinearLayout;
-import android.widget.ScrollView;
 import android.widget.TextView;
 
+import cn.lineai.feature.chat.toolcall.BoundedScrollView;
 import cn.lineai.ui.i18n.R;
 import cn.lineai.ui.kit.IconButton;
 import cn.lineai.ui.kit.Icons;
@@ -25,7 +25,7 @@ final class ReasoningBlockView extends LinearLayout {
     private final LinearLayout header;
     private final TextView label;
     private final IconButton chevron;
-    private final CappedScrollView scroller;
+    private final BoundedScrollView scroller;
     private final TextView body;
     private Tokens tokens;
     private DisclosureState disclosure;
@@ -60,7 +60,7 @@ final class ReasoningBlockView extends LinearLayout {
         addView(header, new LayoutParams(LayoutParams.MATCH_PARENT,
                 LayoutParams.WRAP_CONTENT));
 
-        scroller = new CappedScrollView(context, Ui.dp(context, 180));
+        scroller = new BoundedScrollView(context, 180);
         scroller.setVerticalScrollBarEnabled(true);
         scroller.setFillViewport(false);
         body = Ui.text(context, "", Tokens.FONT_SM, tokens.textTertiary, Typeface.NORMAL);
@@ -92,11 +92,7 @@ final class ReasoningBlockView extends LinearLayout {
         this.disclosure = disclosure;
         this.byDefault = byDefault;
         this.live = live;
-        if (this.scrollable != scrollable) {
-            this.scrollable = scrollable;
-            scroller.setMaxHeight(scrollable ? Ui.dp(getContext(), 180) : Integer.MAX_VALUE);
-            scroller.setVerticalScrollBarEnabled(scrollable);
-        }
+        applyScrollPreference(scrollable);
         if (!text.equals(body.getText().toString())) {
             body.setText(text);
         }
@@ -104,6 +100,21 @@ final class ReasoningBlockView extends LinearLayout {
         this.live = live;
         updateLabel();
         applyState();
+    }
+
+    /**
+     * Applies the thinking-scroll preference to an already rendered block, so flipping it does
+     * not require a rebuild.
+     *
+     * @param scrollable true to cap the body at 180dp with its own scroll
+     */
+    void applyScrollPreference(boolean scrollable) {
+        if (this.scrollable == scrollable) {
+            return;
+        }
+        this.scrollable = scrollable;
+        scroller.setMaxHeightDp(scrollable ? 180 : 0);
+        scroller.setVerticalScrollBarEnabled(scrollable);
     }
 
     /** Called when the turn finishes so a live "thinking" header becomes the done label. */
@@ -146,33 +157,5 @@ final class ReasoningBlockView extends LinearLayout {
     private void applyState() {
         chevron.setIconType(open ? Icons.CHEVRON_DOWN : Icons.CHEVRON_RIGHT);
         scroller.setVisibility(open ? VISIBLE : GONE);
-    }
-
-    /** ScrollView with a hard height cap so a long thought cannot push the answer away. */
-    private static final class CappedScrollView extends ScrollView {
-
-        private int maxHeight;
-
-        CappedScrollView(Context context, int maxHeight) {
-            super(context);
-            this.maxHeight = maxHeight;
-        }
-
-        /** Updates the cap and re-measures. */
-        void setMaxHeight(int value) {
-            maxHeight = value;
-            requestLayout();
-        }
-
-        @Override
-        protected void onMeasure(int widthMeasureSpec, int heightMeasureSpec) {
-            int height = heightMeasureSpec;
-            if (maxHeight > 0 && MeasureSpec.getMode(heightMeasureSpec) != MeasureSpec.EXACTLY) {
-                height = MeasureSpec.makeMeasureSpec(
-                        Math.min(MeasureSpec.getSize(heightMeasureSpec), maxHeight),
-                        MeasureSpec.AT_MOST);
-            }
-            super.onMeasure(widthMeasureSpec, height);
-        }
     }
 }

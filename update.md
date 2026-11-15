@@ -1,5 +1,55 @@
 # Changelog / 更新日志
 
+## v2.1.2
+
+### English
+
+#### Chat and thinking
+
+- **Per-step thinking** - the new `Thinking per tool step` switch (`AI behavior > Thinking display`, key `ai.stepThinking`, off by default) keeps the reasoning of every tool round: reasoning that arrives attached to a tool call and without reply text becomes its own disclosure before that round's calls instead of being folded into the tool group, so a run of consecutive calls no longer swallows the thinking. Call-only rounds still collapse into one group, and in this mode a one-call group shows a plain `Tool calls` header instead of repeating `Used 1 tools` while parallel batches keep their count.
+- **Expanded thinking panes no longer render empty** - the disclosure body was measured through a private capped scroll view that treated the timeline's unbounded row spec as a zero-height bound, so expanding a thinking pane produced a blank area. The body now scrolls inside the shared `toolcall/BoundedScrollView`, whose 180dp cap treats an unbounded parent spec as the available height: long thoughts stay capped with inner scrolling and hand the drag back to the timeline at their edges. Flipping the thinking-scroll preference now also restyles panes that are already on screen.
+
+#### Fixes
+
+- **Cleartext model endpoints** - plain HTTP is accepted only when the parsed URI host is exactly `localhost`, `127.0.0.1`, `::1` or `10.0.2.2`; look-alike hosts such as `localhost.example.com` or `127.0.0.1.example.com` are rejected instead of opening a plaintext connection, HTTPS endpoints must be absolute URLs with a host, and malformed or host-less base URLs fail with `INVALID_INPUT` before any connection is opened.
+- **SSH diagnostics thread crash** - probe reports are now delivered on the main thread instead of the IO lane, so the SSH settings page no longer raises `CalledFromWrongThreadException`; Termux pre-flight errors honour the same main-thread promise, and the `ToolLoopEngine` listener contract documents the producing thread so consumers can marshal while preserving order.
+
+#### Documentation
+
+- **Security policy** - new `SECURITY.md` covering supported versions, private vulnerability reporting through email and GitHub advisories, the disclosure process, scope, the application security model and trust boundaries, security-relevant settings, known limitations, hardening guidance and safe harbor terms.
+
+#### Tests
+
+- New `ReasoningBlockViewTest` (Robolectric) pins the expanded-body height under the timeline's unbounded measure spec, the 180dp cap, natural expansion with inner scrolling off, the in-place scroll-preference flip and the per-step/folded header labels; `TurnAssemblerTest` grows to 13 cases for per-step reasoning ordering and grouping; `SshDiagnosticsTest` pins the two-lane thread delivery; `HttpModelClientProtocolTest` covers exact-host acceptance and look-alike rejection.
+
+#### Release
+
+- Version `2.1.2` (versionCode 51); the release workflow builds and publishes both the slim and local variants.
+
+### 中文
+
+#### 聊天与思考
+
+- **逐步显示思考** - 新增「设置 → AI 行为 → 思考过程 → 逐步显示思考」开关（`ai.stepThinking`，默认关闭）：随工具调用一起到达、且没有正文的思考会在该轮工具调用之前单独显示折叠框，不再被工具组折叠吞掉，连续多次工具调用也能逐步看到思考；只有工具调用、没有思考的轮次仍然合并为一个工具组，该模式下仅含一次调用的工具组标题显示为「工具调用」而不再重复「使用了 1 个工具」，并行批量调用仍保留数量。
+- **思考折叠框展开后不再空白** - 正文测量原先走私有的限高 ScrollView，把时间线的无界行高测量规格当成 0 高度上限，因此展开思考框只剩一片空白；现在正文使用共享的 `toolcall/BoundedScrollView`，其 180dp 上限把无界父规格视为可用高度，长思考保持 180dp 上限并支持内部滚动、到边缘后把拖动手势交还外层时间线；「滚动显示」开关切换后也会立即作用于已渲染的思考框。
+
+#### 修复
+
+- **明文模型端点校验** - 仅当解析出的 URI 主机恰好是 `localhost`、`127.0.0.1`、`::1` 或 `10.0.2.2` 时才允许明文 HTTP；`localhost.example.com`、`127.0.0.1.example.com` 等相似主机被拒绝，HTTPS 端点必须是带主机的绝对地址，空、相对或无法解析的 base URL 在建立连接之前就以 `INVALID_INPUT` 失败。
+- **SSH 诊断线程崩溃** - 探测报告改为主线程回调，SSH 设置页不再触发 `CalledFromWrongThreadException`；Termux 预检错误遵循同样的主线程约定，`ToolLoopEngine` 监听器契约补充说明事件到达线程，消费者可在保持顺序的前提下自行切换线程。
+
+#### 文档
+
+- **安全策略** - 新增 `SECURITY.md`，包含支持的版本、通过邮件与 GitHub 公告的私下报告渠道、披露流程、适用范围、应用安全模型与信任边界、与安全相关的设置、已知限制、加固建议与安全港条款。
+
+#### 测试
+
+- 新增 `ReasoningBlockViewTest`（Robolectric），固定时间线无界测量下展开正文的高度、180dp 上限、关闭内部滚动后的自然展开、原地切换滚动开关，以及逐步/折叠两种模式的工具组标题；`TurnAssemblerTest` 扩充到 13 项，覆盖逐步思考的顺序与分组；`SshDiagnosticsTest` 固定双通道线程投递；`HttpModelClientProtocolTest` 覆盖精确主机放行与相似主机拒绝。
+
+#### 发布
+
+- 版本 `2.1.2`（versionCode 51）；发布工作流会构建并发布 slim 与 local 两个变体。
+
 ## v2.1.1
 
 ### English

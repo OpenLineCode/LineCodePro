@@ -388,6 +388,8 @@
     <string name="screen_llm_scroll_desc">When off, fully expands directly</string>
     <string name="screen_llm_auto_expand_label">Auto expand</string>
     <string name="screen_llm_auto_expand_desc">Auto expand on incoming thinking</string>
+    <string name="screen_llm_step_thinking_label">Thinking per tool step</string>
+    <string name="screen_llm_step_thinking_desc">Show a thinking disclosure for every tool step, including consecutive calls without reply text</string>
     <string name="screen_llm_keep_reasoning_label">Keep full reasoning</string>
     <string name="screen_llm_keep_reasoning_desc">Send historical reasoning back to compatible models, good for multi-round tool calls</string>
 
@@ -1618,6 +1620,7 @@
     <string name="chat_process_running">Processing</string>
     <string name="chat_process_pending">Waiting for confirmation</string>
     <string name="chat_tools_count">Used %1$d tools</string>
+    <string name="chat_tools_step_label">Tool calls</string>
     <string name="chat_files_changed">Edited %1$d files</string>
     <string name="chat_review_changes">Review</string>
     <string name="chat_approval_allow_once">Allow once</string>
