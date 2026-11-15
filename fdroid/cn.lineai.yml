@@ -1,0 +1,73 @@
+# Copy this file to fdroiddata: metadata/cn.lineai.yml
+# Reproducible-build setup for the slim (no local-model) F-Droid build only.
+# Replace <FULL_40_CHAR_SHA_OF_v2.2.1> with the full commit hash of the release tag
+# that contains the fastlane/ metadata, the reproducible packaging changes and the
+# linecodeFdroid build switch.
+
+Categories:
+  - Development
+  - AI Chat
+License: AGPL-3.0-or-later
+AuthorName: LineCode Pro contributors
+AuthorEmail: jiyu03@qq.com
+SourceCode: https://github.com/OpenLineCode/LineCodePro
+IssueTracker: https://github.com/OpenLineCode/LineCodePro/issues
+RepoType: git
+Repo: https://github.com/OpenLineCode/LineCodePro.git
+
+# Reproducible build: F-Droid rebuilds the tagged source and only publishes the
+# project-signed APK when its rebuild matches this reference binary byte for byte
+# (except the signature). With these two fields only the upstream-signed APK is
+# published; no APK signed by F-Droid's key is shipped. The asset name contains
+# spaces, hence the URL-encoded %20.
+Binaries: https://github.com/OpenLineCode/LineCodePro/releases/download/v%v/LineCode%20Pro%20%v-slim.APK
+AllowedAPKSigningKeys: 1c2c0c3db2c39b31355168ec30a7026f7c6b3931f25fd650745dd88112a64fac
+
+Builds:
+  - versionName: 2.2.1
+    versionCode: 53
+    commit: <FULL_40_CHAR_SHA_OF_v2.2.1>
+    gradle:
+      - yes
+    gradleprops:
+      - linecodeFdroid=true
+    prebuild:
+      - sed -i '/mirrors.cloud.tencent.com/d' settings.gradle.kts build-logic/settings.gradle.kts
+    scandelete:
+      - third_party/llama-cpp/prebuilt
+
+MaintainerNotes: |-
+  Slim build only; the optional local-model (llama.cpp) variant is not submitted to
+  F-Droid and remains a GitHub-only release. The vendored prebuilt llama.cpp
+  libraries under third_party/llama-cpp/prebuilt are unused by the slim build and
+  removed by scandelete so the binary scan passes.
+
+  The Tencent Cloud Maven mirror in settings.gradle.kts and build-logic/settings.gradle.kts
+  is removed in prebuild so every dependency is resolved from Google Maven or
+  Maven Central (trusted Maven repositories).
+
+  -PlinecodeFdroid=true skips the upstream release-signing validation and the
+  app/release export step, so F-Droid receives an unsigned APK for the
+  reproducibility check while upstream release artifacts are left untouched.
+  Because Binaries and AllowedAPKSigningKeys are set, F-Droid publishes the
+  project-signed APK from that URL only after its rebuild verifies; the same
+  signing key is used for GitHub releases and F-Droid, so users can switch
+  channels without reinstalling.
+
+  The release build pins buildToolsVersion 36.0.0 and disables resource
+  shrinking so the tagged source produces the same APK on the GitHub Actions
+  runner and the F-Droid build server. Version info lives in
+  app/build.gradle.kts (releaseVersionName variable and versionCode), hence
+  UpdateCheckData.
+
+  No ads, analytics, crash reporting or Google Play services. Update checks are
+  opt-in: the app makes no update request until the user manually checks once
+  (About > Check for updates); reminders can be muted afterwards. Network traffic
+  only goes to model endpoints, MCP servers and services the user configures,
+  plus the project's GitHub release API after opt-in.
+
+AutoUpdateMode: Version
+UpdateCheckMode: Tags ^v[0-9]+\.[0-9]+\.[0-9]+$
+UpdateCheckData: 'app/build.gradle.kts|versionCode = (\d+)|app/build.gradle.kts|releaseVersionName = "([^"]+)"'
+CurrentVersion: 2.2.1
+CurrentVersionCode: 53
