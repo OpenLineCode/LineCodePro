@@ -33,6 +33,41 @@ public class UpdatePreferencesTest {
         assertEquals("false", settings.values.get("update.muted"));
     }
 
+    @Test
+    public void automaticChecksAreDisabledUntilAManualCheck() {
+        MapSettings settings = new MapSettings();
+        UpdatePreferences preferences = new UpdatePreferences(settings);
+        assertFalse("a fresh install never checks automatically",
+                preferences.autoCheckAllowed());
+
+        preferences.setManualChecked(true);
+        assertTrue("a manual check opts in to automatic checks",
+                new UpdatePreferences(settings).autoCheckAllowed());
+        assertEquals("true", settings.values.get(UpdatePreferences.KEY_MANUAL_CHECKED));
+    }
+
+    @Test
+    public void muteWinsOverTheManualOptIn() {
+        MapSettings settings = new MapSettings();
+        UpdatePreferences preferences = new UpdatePreferences(settings);
+        preferences.setManualChecked(true);
+        preferences.setMuted(true);
+
+        assertFalse(preferences.autoCheckAllowed());
+        assertTrue("the manual opt-in survives a mute round trip", preferences.manualChecked());
+
+        preferences.setMuted(false);
+        assertTrue(preferences.autoCheckAllowed());
+    }
+
+    @Test
+    public void manualOptInPersistsAcrossInstances() {
+        MapSettings settings = new MapSettings();
+        new UpdatePreferences(settings).setManualChecked(true);
+        assertTrue(new UpdatePreferences(settings).manualChecked());
+        assertTrue(new UpdatePreferences(settings).autoCheckAllowed());
+    }
+
     /** Minimal in-memory settings store used by preference tests. */
     private static final class MapSettings implements SettingsStore {
         final Map<String, String> values = new HashMap<>();

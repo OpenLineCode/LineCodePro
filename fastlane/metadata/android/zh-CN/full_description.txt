@@ -1,0 +1,30 @@
+LineCode Pro 是一个把完整工具链塞进约 1 MB 安装包的 Android AI 编程工作区。
+
+体积小是刻意的设计：界面与逻辑全部手写 Java 绘制，没有 Kotlin 运行时、没有 AndroidX、没有 Compose、没有广告、没有统计 SDK，也没有 Google Play 服务挡在你和项目之间。
+
+对话，对接任意模型
+- 流式对话支持任意 OpenAI 兼容的 Chat Completions / Responses 端点、Anthropic Messages，以及 Codex 风格网关。
+- 每个模型可配置思考等级，自动识别上下文窗口，按轮统计 token 与耗时。
+- 长期记忆、软/硬上下文压缩与项目记忆，长会话不中断。
+
+不只是输入框
+- 在工作区里读取、创建、编辑、搜索和整理文件。
+- 本地、SSH、Termux 或兼容的 Android 终端提供者中执行 Shell 命令。
+- 网页搜索、图片理解与生成、HTTP MCP 服务。
+- 把任务交给自定义 Agent，安装 SKILL.md 技能，通过 SkillHub 发现社区技能。
+- 每次修改都有 diff 记录并可回滚；审批模式支持自动、确认与只读。
+
+真正的工作区
+- 应用管理的项目、SSH 主机、Termux 与终端提供者主目录。
+- 对话、规划、Agent、设备控制四种会话模式（设备控制需手动开启无障碍服务）。
+- 明暗、跟随系统、纸张、高对比度与自定义配色，Markdown 与代码渲染同样由手写 View 完成。
+
+默认保护隐私
+- 对话、设置、记忆与 diff 历史都保存在本地 SQLite 数据库。
+- 凭据与项目内容只会发送到你配置的端点，包括自建服务。
+- 没有统计、没有崩溃上报、没有账号、没有广告。
+- 更新检查默认关闭：在你手动检查一次之前，应用不会访问 GitHub；之后可以自动提示新版本，也可以随时关闭提醒。
+
+F-Droid 版本为精简版：不包含原生库，也不支持本地 GGUF 模型，请自备 API Key 或自建端点。对话、工具、Agent、MCP、技能、SSH、项目、主题与本地历史，全都在约 1 MB 的安装包里。
+
+需要 Android 8.0（API 26）或更高版本。源码与问题反馈：https://github.com/OpenLineCode/LineCodePro

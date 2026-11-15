@@ -118,11 +118,13 @@ final class HostActions {
     }
 
     /**
-     * Checks the latest GitHub release once per installed version unless the user muted reminders.
+     * Checks the latest GitHub release once per installed version when the user opted in.
      *
-     * <p>Runs on the io scheduler; a newer release opens the shared update dialog. The checked
-     * version marker keeps activity recreations from repeating the network call, and choosing
-     * Go-to-update clears the mute preference inside the dialog.</p>
+     * <p>Automatic checks remain disabled until the user has run About &gt; Check for updates at
+     * least once, so a fresh install never contacts GitHub on launch; muted reminders keep them
+     * disabled. Runs on the io scheduler; a newer release opens the shared update dialog. The
+     * checked version marker keeps activity recreations from repeating the network call, and
+     * choosing Go-to-update clears the mute preference inside the dialog.</p>
      *
      * @param activity activity hosting the dialog
      * @param tokens palette for the dialog
@@ -135,7 +137,7 @@ final class HostActions {
         String checked = graph.settings().get("update.autoCheckedVersion", "");
         cn.lineai.feature.settings.UpdatePreferences preferences =
                 new cn.lineai.feature.settings.UpdatePreferences(graph.settings());
-        if (preferences.muted() || current.equals(checked)) return;
+        if (!preferences.autoCheckAllowed() || current.equals(checked)) return;
         cn.lineai.core.kernel.time.Scheduler scheduler = graph.scheduler();
         scheduler.io(() -> {
             cn.lineai.feature.settings.ReleaseInfo release =
