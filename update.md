@@ -1,5 +1,31 @@
 # Changelog / 更新日志
 
+## v2.2.1
+
+### English
+
+#### F-Droid and reproducible builds
+
+- **Opt-in update checks** - LineCode Pro no longer contacts GitHub for updates on launch. Automatic checks start only after the first manual check in About, and reminders can still be muted.
+- **Reproducible, project-signed F-Droid build** - F-Droid builds the slim variant from source and verifies the result against the signed APK published here, so the F-Droid version keeps the project signature: users can move between the GitHub and F-Droid builds without uninstalling, and the installed package provably matches the tagged source. The optional local-model build remains a GitHub-only release and is not submitted to F-Droid.
+- **Deterministic release packaging** - the release build pins build-tools 36.0.0 and no longer uses resource shrinking, both of which are required for the tagged APK to rebuild byte-identically on the F-Droid build server.
+
+#### Release
+
+- Version `2.2.1` (versionCode 53); the slim APK is reproducible and project-signed, the local-model variant is published on GitHub only.
+
+### 中文
+
+#### F-Droid 与可复现构建
+
+- **更新检查改为 opt-in** - 启动时不再为检查更新访问 GitHub；只有在关于页手动检查过一次之后才会自动检查，且仍可随时关闭提醒。
+- **可复现的项目签名 F-Droid 版本** - F-Droid 从源码构建 slim 版本，并与这里发布的签名 APK 逐字节校验，因此 F-Droid 版本保留项目自己的签名：用户可在 GitHub 版与 F-Droid 版之间直接覆盖升级、无需卸载，安装包也能证明与打 tag 的源码一致。可选的本地模型版本仍只在 GitHub 发布，不提交 F-Droid。
+- **确定性打包** - Release 构建固定 build-tools 36.0.0、并去掉资源压缩，使同一 tag 的源码在 F-Droid 构建服务器上能逐字节重建出相同 APK。
+
+#### 发布
+
+- 版本 `2.2.1`（versionCode 53）；slim APK 可复现且使用项目签名，本地模型版本仍只在 GitHub 发布。
+
 ## v2.2.0
 
 ### English

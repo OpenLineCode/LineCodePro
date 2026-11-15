@@ -11,8 +11,9 @@ val enableLocalModel =
 val bundleLocalModel =
     (providers.gradleProperty("linecodeLocalModelBundle").orNull ?: enableLocalModel.toString())
         .toBoolean()
+val linecodeFdroid = providers.gradleProperty("linecodeFdroid").orNull?.toBoolean() ?: false
 
-val releaseVersionName = "2.2.0"
+val releaseVersionName = "2.2.1"
 val releaseVariant = if (enableLocalModel) "local" else "slim"
 val releaseApkName = "LineCode Pro $releaseVersionName-$releaseVariant.APK"
 val releaseIdsigName = "$releaseApkName.idsig"
@@ -111,6 +112,9 @@ android {
     }
 
     namespace = "cn.lineai"
+    // Pinned so the GitHub Actions release build and the F-Droid build server use the same
+    // build tools; a mismatch changes the packaged resources and breaks reproducibility.
+    buildToolsVersion = "36.0.0"
     compileSdk {
         version = release(36) {
             minorApiLevel = 1
@@ -121,7 +125,7 @@ android {
         applicationId = "cn.lineai"
         minSdk = 26
         targetSdk = 37
-        versionCode = 52
+        versionCode = 53
         versionName = releaseVersionName
     }
 
@@ -152,7 +156,10 @@ android {
             }
             isDebuggable = false
             isMinifyEnabled = true
-            isShrinkResources = true
+            // Resource shrinking is not deterministic across build machines, and this project has
+            // few unused resources to remove. Keep it off so the tagged release APK can be
+            // reproduced exactly by F-Droid.
+            isShrinkResources = false
             proguardFiles(
                 getDefaultProguardFile("proguard-android-optimize.txt"),
                 "proguard-rules.pro"
@@ -240,16 +247,21 @@ tasks.matching {
     dependsOn(generateReleaseObfuscationDictionary)
 }
 
-tasks.matching {
-    it.name == "assembleRelease" || it.name == "bundleRelease"
-}.configureEach {
-    dependsOn(validateReleaseSigning)
-}
+// F-Droid builds from source with -PlinecodeFdroid=true: it must not require local signing
+// material (F-Droid verifies the unsigned rebuild against the signed release APK before
+// publishing it under the project signature) and must not overwrite the app/release artifacts.
+if (!linecodeFdroid) {
+    tasks.matching {
+        it.name == "assembleRelease" || it.name == "bundleRelease"
+    }.configureEach {
+        dependsOn(validateReleaseSigning)
+    }
 
-tasks.matching {
-    it.name == "assembleRelease"
-}.configureEach {
-    finalizedBy(exportReleaseApk)
+    tasks.matching {
+        it.name == "assembleRelease"
+    }.configureEach {
+        finalizedBy(exportReleaseApk)
+    }
 }
 
 dependencies {

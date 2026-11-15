@@ -497,6 +497,9 @@ public final class SettingsPageFactory {
 
     /** Checks the latest GitHub release on io and renders the dialog or a status toast. */
     private void checkForUpdates() {
+        // The manual check is the user's opt-in to update checks, so record it before the request
+        // can fail; later launches may then check automatically unless reminders are muted.
+        new UpdatePreferences(host.graph().settings()).setManualChecked(true);
         Toast.makeText(host.activity(), R.string.update_checking, Toast.LENGTH_SHORT).show();
         Scheduler scheduler = host.graph().scheduler();
         String current = AppInfo.versionName(host.activity());

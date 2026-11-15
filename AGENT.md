@@ -149,6 +149,10 @@ view between root and session conversations; model switching is root-only.
 - Release: `./gradlew clean :app:assembleRelease` (slim) and
   `./gradlew clean :app:assembleRelease -PlinecodeEnableLocalModel=true` (local model); both
   are signed from `signing.properties` and publish as `-slim.APK` / `-local.APK`.
+- F-Droid packaging: `./gradlew clean :app:assembleRelease -PlinecodeFdroid=true` builds the
+  unsigned slim APK without requiring `signing.properties` and without writing `app/release/`.
+  Release builds pin `buildToolsVersion` 36.0.0 and keep resource shrinking off so the tagged
+  source rebuilds reproducibly for F-Droid's signature-copy verification.
 - Lint: `./gradlew :app:lintVitalRelease`
 
 Architecture guards: `linecode.java`, `linecode.android`, `linecode.verify`, `linecode.app`
