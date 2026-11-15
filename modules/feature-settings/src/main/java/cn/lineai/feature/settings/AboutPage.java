@@ -15,11 +15,27 @@ import cn.lineai.ui.kit.SettingsPage;
 import cn.lineai.ui.kit.Ui;
 import cn.lineai.ui.tokens.Tokens;
 
-/** About screen: app identity, developer contacts and legal entry. */
+/**
+ * About screen: app identity, update check, developer contacts and legal entry.
+ */
 public final class AboutPage extends SettingsPage {
 
+    /** Host callbacks for the actions offered by the about screen. */
+    public interface Listener {
+        /** Opens the project repository page. */
+        void openGithub();
+
+        /** Opens the open-source licences screen. */
+        void openLicenses();
+
+        /** Starts the asynchronous GitHub release check. */
+        void checkForUpdates();
+    }
+
+    private final Listener listener;
+
     /**
-     * Builds the about screen with identity, developer contacts, and legal entries.
+     * Builds the about screen with identity, update check, developer contacts, and legal entries.
      *
      * @param context Android context used to inflate views
      * @param tokens design tokens for the current theme
@@ -27,12 +43,12 @@ public final class AboutPage extends SettingsPage {
      * @param appLabel display name of the application
      * @param versionName human-readable version string
      * @param versionCode numeric build identifier
-     * @param github action opening the project repository page
-     * @param licenses action opening the open-source licences page
+     * @param listener host callbacks for the repository, licence and update actions
      */
     public AboutPage(Context context, Tokens tokens, Runnable back, String appLabel,
-                     String versionName, long versionCode, Runnable github, Runnable licenses) {
+                     String versionName, long versionCode, Listener listener) {
         super(context, R.string.screen_about_title, tokens, back);
+        this.listener = listener;
         Ui.padding(content, 16, 16, 16, 100);
 
         LinearLayout header = new LinearLayout(context);
@@ -74,6 +90,9 @@ public final class AboutPage extends SettingsPage {
         group(R.string.screen_about_section_version);
         item(Icons.PACKAGE, R.string.screen_about_apk_version,
                 context.getString(R.string.screen_about_version_value, versionName, versionCode), null);
+        item(Icons.REFRESH_CW, R.string.screen_about_check_update_title,
+                context.getString(R.string.screen_about_check_update_desc),
+                listener::checkForUpdates);
 
         group(R.string.screen_about_section_developer);
         item(Icons.USER, R.string.screen_about_developer_label,
@@ -81,11 +100,11 @@ public final class AboutPage extends SettingsPage {
         item(Icons.MESSAGE_CIRCLE, R.string.screen_about_qq_label,
                 context.getString(R.string.screen_about_qq_value), null);
         item(Icons.GIT_BRANCH, R.string.screen_about_github_label,
-                context.getString(R.string.screen_about_github_value), github);
+                context.getString(R.string.screen_about_github_value), listener::openGithub);
 
         group(R.string.screen_about_section_legal);
         item(Icons.FILE_TEXT, R.string.screen_about_open_source_licenses,
-                context.getString(R.string.screen_about_legal_value), licenses);
+                context.getString(R.string.screen_about_legal_value), listener::openLicenses);
 
         TextView footer = Ui.text(context, context.getString(R.string.screen_about_copyright),
                 Tokens.FONT_XS, tokens.textTertiary, Typeface.NORMAL);

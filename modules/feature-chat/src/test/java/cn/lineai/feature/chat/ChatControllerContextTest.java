@@ -52,6 +52,17 @@ public class ChatControllerContextTest {
         assertEquals(10, controller.state().contextPercent);
     }
 
+    @Test public void deviceSummaryIsStoredForFailureDiagnostics() {
+        ChatController controller = controller();
+
+        controller.setDeviceSummary("  Pixel 9 (Android 15, SDK 35), app 2.2.0 (code 220)  ");
+        assertEquals("Pixel 9 (Android 15, SDK 35), app 2.2.0 (code 220)",
+                controller.deviceSummary);
+
+        controller.setDeviceSummary(null);
+        assertEquals("", controller.deviceSummary);
+    }
+
     @Test public void openingAConversationFallsBackToSettingsContext() {
         values.put(ChatController.KEY_CONTEXT_SIZE, "2000");
         loaded.add(message("c1", 400));

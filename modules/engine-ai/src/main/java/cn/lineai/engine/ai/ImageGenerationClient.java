@@ -41,7 +41,15 @@ public final class ImageGenerationClient {
         headers.put("Accept", "application/json");
         headers.put("Authorization", "Bearer " + model.apiKey);
         String url = ModelCatalogClient.endpoint(model.baseUrl, "/images/generations");
-        String raw = ModelCatalogClient.execute("POST", url, headers, body.toString());
+        Map<String, String> merged = RequestHeaders.merge(headers, model.headers);
+        HttpDiagnostics.Request diagnostic = new HttpDiagnostics.Request(model.protocol,
+                model.baseUrl, url, model.modelId, body.toString());
+        String raw;
+        try {
+            raw = ModelCatalogClient.execute("POST", url, merged, body.toString());
+        } catch (IOException error) {
+            throw new IOException(HttpDiagnostics.format(diagnostic, merged, "", "", error), error);
+        }
         byte[] bytes = extractBase64(raw);
         if (bytes == null) {
             String imageUrl = extractUrl(raw);

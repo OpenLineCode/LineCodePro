@@ -30,8 +30,8 @@ public final class CodexCodec {
      * Builds the JSON body of a Responses API streaming request.
      *
      * <p>{@code store} is enabled only for Azure deployments, which require server-side storage.
-     * Reasoning is emitted with {@code summary} set to {@code auto}, and {@code max} effort is
-     * downgraded to {@code high} because the Responses API defines no {@code max} level.</p>
+     * Reasoning is emitted with {@code summary} set to {@code auto}; the effort is the explicit
+     * wire value when the model carries one and the requested level otherwise.</p>
      *
      * @param request normalized completion request
      * @param baseUrl provider base URL, used only to detect Azure
@@ -59,9 +59,8 @@ public final class CodexCodec {
             body.put("store", isAzure(baseUrl));
             body.put("include", new JSONArray());
             if (request.reasoning != null && request.reasoning.enabled()) {
-                String effort = request.reasoning.effectiveEffort();
                 body.put("reasoning", new JSONObject()
-                        .put("effort", "max".equals(effort) ? "high" : effort)
+                        .put("effort", request.reasoning.wireValue())
                         .put("summary", "auto"));
             }
             return body.toString();
@@ -135,6 +134,10 @@ public final class CodexCodec {
 
             /** Decodes one Responses event, resolving tool calls through the index map. */
             @Override public StreamEvent decode(String payload) {
+                if (payload == null || payload.trim().isEmpty()
+                        || "[DONE]".equals(payload.trim())) {
+                    return StreamEvent.of("", "", "", 0, 0);
+                }
                 try {
                     JSONObject event = new JSONObject(payload);
                     String type = event.optString("type");
@@ -157,7 +160,9 @@ public final class CodexCodec {
                     }
                     return CodexCodec.parse(payload);
                 } catch (JSONException error) {
-                    throw new IllegalStateException("Codex stream parse failed", error);
+                    // Codex-compatible gateways occasionally emit non-JSON keep-alives; skipping
+                    // them keeps the stream alive instead of failing with a parse error.
+                    return StreamEvent.of("", "", "", 0, 0);
                 }
             }
 
@@ -182,6 +187,10 @@ public final class CodexCodec {
      *         valid JSON
      */
     public static StreamEvent parse(String payload) {
+        if (payload == null || payload.trim().isEmpty()
+                || "[DONE]".equals(payload.trim())) {
+            return StreamEvent.of("", "", "", 0, 0);
+        }
         try {
             JSONObject event = new JSONObject(payload);
             String type = event.optString("type");
@@ -195,16 +204,22 @@ public final class CodexCodec {
             if ("response.reasoning_summary_text.delta".equals(type)) {
                 return StreamEvent.reasoning(event.optString("delta", ""));
             }
-            if ("response.completed".equals(type)) {
+            if ("response.completed".equals(type) || "response.done".equals(type)) {
                 JSONObject response = event.optJSONObject("response");
                 JSONObject usage = response == null ? null : response.optJSONObject("usage");
+                int cached = 0;
+                if (usage != null) {
+                    JSONObject details = usage.optJSONObject("input_tokens_details");
+                    cached = details == null ? 0 : details.optInt("cached_tokens", 0);
+                }
                 return StreamEvent.of("", "", "stop",
                         usage == null ? 0 : usage.optInt("input_tokens", 0),
-                        usage == null ? 0 : usage.optInt("output_tokens", 0));
+                        usage == null ? 0 : usage.optInt("output_tokens", 0), cached);
             }
             return StreamEvent.of("", "", "", 0, 0);
         } catch (JSONException error) {
-            throw new IllegalStateException("Codex stream parse failed", error);
+            // Ignore payloads that are not JSON events; the transport remains usable.
+            return StreamEvent.of("", "", "", 0, 0);
         }
     }
 

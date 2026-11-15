@@ -47,6 +47,10 @@ public final class Message {
     public final int inputTokens;
     public final int outputTokens;
     public final int cachedTokens;
+    /** Milliseconds from request start to the first streamed model delta; zero when unknown. */
+    public final long ttftMs;
+    /** Milliseconds the model stream took; zero when unknown. */
+    public final long durationMs;
     public final long createdAt;
     public final long updatedAt;
 
@@ -71,6 +75,8 @@ public final class Message {
         this.inputTokens = b.inputTokens;
         this.outputTokens = b.outputTokens;
         this.cachedTokens = b.cachedTokens;
+        this.ttftMs = Math.max(0L, b.ttftMs);
+        this.durationMs = Math.max(0L, b.durationMs);
         this.createdAt = b.createdAt;
         this.updatedAt = b.updatedAt;
     }
@@ -139,6 +145,7 @@ public final class Message {
                 .finishReason(finishReason)
                 .reviewState(reviewState)
                 .tokens(inputTokens, outputTokens, cachedTokens)
+                .timing(ttftMs, durationMs)
                 .times(createdAt, updatedAt);
     }
 
@@ -185,6 +192,8 @@ public final class Message {
         private int inputTokens;
         private int outputTokens;
         private int cachedTokens;
+        private long ttftMs;
+        private long durationMs;
         private long createdAt;
         private long updatedAt;
 
@@ -357,6 +366,18 @@ public final class Message {
         public Builder times(long created, long updated) {
             createdAt = created;
             updatedAt = updated;
+            return this;
+        }
+
+        /**
+         * Sets the model timing metrics.
+         * @param firstToken milliseconds to the first streamed delta
+         * @param duration milliseconds the model stream took
+         * @return this builder
+         */
+        public Builder timing(long firstToken, long duration) {
+            ttftMs = firstToken;
+            durationMs = duration;
             return this;
         }
 

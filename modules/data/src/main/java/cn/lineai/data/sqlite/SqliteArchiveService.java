@@ -40,7 +40,7 @@ import cn.lineai.data.api.ArchiveService;
 public final class SqliteArchiveService implements ArchiveService {
 
     private static final String FORMAT = "linecode-archive";
-    private static final int VERSION = 3;
+    private static final int VERSION = 4;
     private static final long MAX_ENTRY_BYTES = 64L * 1024 * 1024;
     /** Per-file cap mirrored from {@link #writeDirectory}; enforced again on import. */
     private static final int MAX_FILE_BYTES = 8 * 1024 * 1024;
@@ -50,8 +50,9 @@ public final class SqliteArchiveService implements ArchiveService {
     /** Order matters: parents must be restored before the rows that reference them. */
     private static final String[] TABLES = {
             "conversations", "agent_sessions", "messages", "message_blocks",
-            "message_tool_calls", "settings", "models", "error_logs", "memories",
-            "extension_agents", "extension_mcps", "file_diffs", "projects", "ipc_providers"
+            "message_tool_calls", "settings", "model_providers", "models", "error_logs",
+            "memories", "extension_agents", "extension_mcps", "file_diffs", "projects",
+            "ipc_providers"
     };
     /** v1 archives carried only the conversation/settings core. */
     private static final String[] V1_TABLES = {
@@ -63,6 +64,14 @@ public final class SqliteArchiveService implements ArchiveService {
             "settings", "models", "error_logs", "memories",
             "extension_agents", "extension_mcps", "file_diffs", "projects", "ipc_providers"
     };
+    /** v3 archives added the agent session table but still carried per-model credentials. */
+    private static final String[] V3_TABLES = {
+            "conversations", "agent_sessions", "messages", "message_blocks",
+            "message_tool_calls", "settings", "models", "error_logs", "memories",
+            "extension_agents", "extension_mcps", "file_diffs", "projects", "ipc_providers"
+    };
+    /** v4 archives add the shared provider table; this array is the current export contract. */
+    private static final String[] V4_TABLES = TABLES;
 
     private final LineCodeDatabase database;
     private final Clock clock;
@@ -94,7 +103,8 @@ public final class SqliteArchiveService implements ArchiveService {
 
     /**
      * Writes the manifest, the optional file trees and one sanitized JSON dump per table. Export
-     * never contains secrets: model API keys are removed and secret settings rows are dropped.
+     * never contains secrets: model and provider API keys are removed and secret settings rows are
+     * dropped.
      *
      * @param output stream receiving the ZIP content; not closed by this call
      * @return row counts of the exported conversations, models and settings
@@ -182,7 +192,9 @@ public final class SqliteArchiveService implements ArchiveService {
 
     /** Rejects archives that miss any table required by their declared format version. */
     private static void requireEntries(Map<String, byte[]> entries, int version) {
-        String[] required = version < 2 ? V1_TABLES : version < 3 ? V2_TABLES : TABLES;
+        String[] required = version < 2 ? V1_TABLES
+                : version < 3 ? V2_TABLES
+                : version < 4 ? V3_TABLES : V4_TABLES;
         for (String table : required) {
             if (!entries.containsKey(table + ".json")) {
                 throw new DomainException(ErrorCode.INVALID_INPUT, "missing " + table);
@@ -190,9 +202,12 @@ public final class SqliteArchiveService implements ArchiveService {
         }
     }
 
-    /** Exports must not contain secrets: models lose api_key, secret settings rows are dropped. */
+    /**
+     * Exports must not contain secrets: providers and models lose their API key, secret settings
+     * rows are dropped. v1-v3 archives have no provider entry and simply skip this table.
+     */
     private static JSONArray sanitize(String table, JSONArray rows) throws JSONException {
-        if ("models".equals(table)) {
+        if ("models".equals(table) || "model_providers".equals(table)) {
             for (int i = 0; i < rows.length(); i++) rows.getJSONObject(i).remove("api_key");
             return rows;
         }

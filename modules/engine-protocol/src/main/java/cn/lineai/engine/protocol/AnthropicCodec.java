@@ -5,8 +5,10 @@ import org.json.JSONException;
 import org.json.JSONObject;
 
 import java.util.List;
+import java.util.Locale;
 
 import cn.lineai.core.model.Message;
+import cn.lineai.core.model.ModelProfile;
 import cn.lineai.core.model.Role;
 
 /**
@@ -24,9 +26,10 @@ public final class AnthropicCodec {
     /**
      * Builds the JSON body of a Messages API streaming request.
      *
-     * <p>{@code max_tokens} is mandatory: it is the thinking budget plus headroom when reasoning
-     * is enabled (floored at 4096), and 4096 otherwise. Images are sent as Base64 source blocks
-     * rather than data URLs.</p>
+     * <p>{@code max_tokens} is mandatory. Claude 5 models use the adaptive thinking shape with
+     * {@code output_config.effort} and a floor of 4096 output tokens; the Anthropic 4 and earlier
+     * families keep the legacy enabled block with an explicit {@code budget_tokens}. Images are
+     * sent as Base64 source blocks rather than data URLs.</p>
      *
      * @param request normalized completion request
      * @return the request body as JSON text
@@ -36,9 +39,13 @@ public final class AnthropicCodec {
         try {
             JSONObject body = new JSONObject();
             body.put("model", request.modelId);
-            int budget = request.reasoning == null ? 0 : request.reasoning.thinkingBudget();
-            boolean thinking = request.reasoning != null && request.reasoning.enabled();
-            body.put("max_tokens", thinking ? Math.max(4096, budget + 1024) : 4096);
+            ReasoningSpec reasoning = request.reasoning;
+            boolean adaptive = claudeAtLeastFive(request.modelId);
+            boolean thinking = reasoning != null && reasoning.enabled();
+            int budget = reasoning == null ? 0 : reasoning.thinkingBudget();
+            body.put("max_tokens", adaptive
+                    ? Math.max(4096, request.maxTokens)
+                    : thinking ? Math.max(4096, budget + 1024) : 4096);
             body.put("stream", true);
             if (!request.systemPrompt.isEmpty()) body.put("system", request.systemPrompt);
             body.put("messages", messages(request));
@@ -52,14 +59,67 @@ public final class AnthropicCodec {
                 }
                 body.put("tools", tools);
             }
-            if (thinking) {
-                body.put("thinking", new JSONObject()
-                        .put("type", "enabled")
-                        .put("budget_tokens", budget));
-            }
+            applyReasoning(body, request.modelId, reasoning, adaptive, thinking);
             return body.toString();
         } catch (JSONException error) {
             throw new IllegalStateException("Cannot build Anthropic request", error);
+        }
+    }
+
+    /**
+     * Writes the protocol-appropriate thinking block.
+     *
+     * <p>Claude 5 uses the adaptive shape plus an effort value; earlier families use the legacy
+     * enabled block with a token budget. Disabling reasoning writes an explicit disabled block
+     * where the family supports it and omits the block entirely for forced-thinking families,
+     * whose API rejects a disable request.</p>
+     */
+    private static void applyReasoning(JSONObject body, String modelId, ReasoningSpec reasoning,
+                                       boolean adaptive, boolean enabled) throws JSONException {
+        if (reasoning == null) {
+            return;
+        }
+        if (enabled) {
+            if (adaptive) {
+                body.put("thinking", new JSONObject()
+                        .put("type", "adaptive")
+                        .put("display", "summarized"));
+                body.put("output_config", new JSONObject()
+                        .put("effort", reasoning.wireValue()));
+            } else {
+                body.put("thinking", new JSONObject()
+                        .put("type", "enabled")
+                        .put("budget_tokens", reasoning.thinkingBudget()));
+            }
+            return;
+        }
+        if (ModelProfile.reasoningToggleable(modelId)) {
+            body.put("thinking", new JSONObject().put("type", "disabled"));
+        }
+    }
+
+    /** True for Claude 5 and later, determined from the model identifier. */
+    private static boolean claudeAtLeastFive(String modelId) {
+        String id = modelId == null ? "" : modelId.toLowerCase(Locale.ROOT);
+        int start = id.indexOf("claude");
+        if (start < 0) {
+            return false;
+        }
+        int index = start + "claude".length();
+        while (index < id.length() && !Character.isDigit(id.charAt(index))) {
+            index++;
+        }
+        if (index >= id.length()) {
+            return false;
+        }
+        int end = index;
+        while (end < id.length() && Character.isDigit(id.charAt(end))) {
+            end++;
+        }
+        try {
+            return Integer.parseInt(id.substring(index, end)) >= 5;
+        } catch (NumberFormatException error) {
+            return false;
         }
     }
 
@@ -179,10 +239,19 @@ public final class AnthropicCodec {
                 throw new IllegalStateException("Anthropic error: " + event.opt("error"));
             }
             if ("message_start".equals(type)) {
-                JSONObject usage = event.optJSONObject("message");
-                JSONObject tokens = usage == null ? null : usage.optJSONObject("usage");
-                return StreamEvent.of("", "", "",
-                        tokens == null ? 0 : tokens.optInt("input_tokens", 0), 0);
+                JSONObject message = event.optJSONObject("message");
+                JSONObject usage = message == null ? null : message.optJSONObject("usage");
+                int input = 0;
+                int cached = 0;
+                if (usage != null) {
+                    // cache_read and cache_creation are reported apart from input_tokens; the
+                    // prompt size is their sum, and only cache_read is a cache hit.
+                    int cacheRead = usage.optInt("cache_read_input_tokens", 0);
+                    int cacheCreation = usage.optInt("cache_creation_input_tokens", 0);
+                    input = usage.optInt("input_tokens", 0) + cacheRead + cacheCreation;
+                    cached = cacheRead;
+                }
+                return StreamEvent.of("", "", "", input, 0, cached);
             }
             if ("message_delta".equals(type)) {
                 JSONObject delta = event.optJSONObject("delta");

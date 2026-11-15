@@ -15,7 +15,7 @@ import java.nio.charset.StandardCharsets;
 import java.util.ArrayList;
 import java.util.List;
 
-import cn.lineai.core.model.McpHeader;
+import cn.lineai.core.model.HttpHeader;
 import cn.lineai.core.model.McpToolInfo;
 
 /**
@@ -134,7 +134,7 @@ public final class McpClient {
      * @throws IOException on transport failure or non-2xx status
      * @throws org.json.JSONException when the response is not JSON at all
      */
-    public List<McpToolInfo> listTools(String url, List<McpHeader> headers) throws IOException {
+    public List<McpToolInfo> listTools(String url, List<HttpHeader> headers) throws IOException {
         JSONObject request = new JSONObject();
         request.put("jsonrpc", "2.0");
         request.put("id", "linecode_" + System.currentTimeMillis());
@@ -155,7 +155,7 @@ public final class McpClient {
      * @throws org.json.JSONException when the arguments are not a JSON object or the response is
      *         not JSON at all
      */
-    public String callTool(String url, List<McpHeader> headers, String toolName,
+    public String callTool(String url, List<HttpHeader> headers, String toolName,
                            String argumentsJson) throws IOException {
         JSONObject request = new JSONObject();
         request.put("jsonrpc", "2.0");
@@ -174,7 +174,7 @@ public final class McpClient {
      *
      * @throws IOException on transport failure or non-2xx status
      */
-    private String post(String url, List<McpHeader> headers, String body) throws IOException {
+    private String post(String url, List<HttpHeader> headers, String body) throws IOException {
         String endpoint = normalizeUrl(url);
         HttpURLConnection connection = null;
         try {
@@ -185,7 +185,7 @@ public final class McpClient {
             connection.setDoOutput(true);
             connection.setRequestProperty("Accept", "application/json, text/event-stream");
             connection.setRequestProperty("Content-Type", "application/json");
-            for (McpHeader header : headers) {
+            for (HttpHeader header : headers) {
                 if (!header.name.isEmpty()) {
                     connection.setRequestProperty(header.name, header.value);
                 }

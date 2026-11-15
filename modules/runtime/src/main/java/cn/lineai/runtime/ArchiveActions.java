@@ -113,6 +113,8 @@ public final class ArchiveActions {
                     .openInputStream(uri)) {
                 cn.lineai.data.api.ArchiveService.Summary summary =
                         host.graph().archives().importFrom(input);
+                // Older archives carry no provider rows; rebuild them before the UI reloads.
+                host.graph().refreshProviders();
                 scheduler.main(() -> {
                     host.graph().settings().invalidate();
                     host.graph().preferences().dispatch(

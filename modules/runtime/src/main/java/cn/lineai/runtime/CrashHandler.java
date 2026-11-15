@@ -58,6 +58,20 @@ public final class CrashHandler implements Thread.UncaughtExceptionHandler {
         return new File(new File(context.getFilesDir(), DIRECTORY), "pending-log.txt");
     }
 
+    /** Best-effort app version label for the crash report; failures degrade to "unknown". */
+    private String appVersion() {
+        try {
+            android.content.pm.PackageInfo info = context.getPackageManager()
+                    .getPackageInfo(context.getPackageName(), 0);
+            long code = android.os.Build.VERSION.SDK_INT >= 28
+                    ? info.getLongVersionCode() : info.versionCode;
+            return (info.versionName == null ? "unknown" : info.versionName)
+                    + " (code " + code + ")";
+        } catch (Exception error) {
+            return "unknown";
+        }
+    }
+
     /**
      * Writes the report, launches the crash activity, and then chains to the previous
      * handler or kills the process. Must stay allocation-tolerant: any failure inside this
@@ -74,10 +88,24 @@ public final class CrashHandler implements Thread.UncaughtExceptionHandler {
             writer.println("time: " + new SimpleDateFormat("yyyy-MM-dd HH:mm:ss",
                     Locale.ROOT).format(new Date()));
             writer.println("thread: " + thread.getName());
+            writer.println("device: " + android.os.Build.MANUFACTURER + " "
+                    + android.os.Build.MODEL + " (" + android.os.Build.DEVICE + ")");
+            writer.println("android: " + android.os.Build.VERSION.RELEASE
+                    + " (SDK " + android.os.Build.VERSION.SDK_INT + ")");
+            writer.println("app: " + appVersion());
+            Runtime runtime = Runtime.getRuntime();
+            writer.println("memory: max=" + runtime.maxMemory() / (1024 * 1024)
+                    + "MB free=" + runtime.freeMemory() / (1024 * 1024) + "MB");
             writer.println();
             error.printStackTrace(writer);
             writer.flush();
             try (FileWriter output = new FileWriter(file)) {
+                output.write(buffer.toString());
+            }
+            // Mirror the report into the pending-log slot so the next launch imports it into
+            // the in-app error log even when the user dismisses the crash screen.
+            File pending = pendingFile(context);
+            try (FileWriter output = new FileWriter(pending)) {
                 output.write(buffer.toString());
             }
             Intent intent = new Intent();

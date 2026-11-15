@@ -17,9 +17,11 @@ import cn.lineai.feature.extensions.SkillEditPage;
 import cn.lineai.feature.extensions.SkillHubPage;
 import cn.lineai.feature.extensions.SkillsExtensionsPage;
 import cn.lineai.feature.extensions.TerminalProvidersPage;
-import cn.lineai.feature.models.ModelEditPage;
-import cn.lineai.feature.models.ModelListPage;
+import cn.lineai.feature.models.ModelDetailPage;
 import cn.lineai.feature.models.ModelScreens;
+import cn.lineai.feature.models.ProviderEditPage;
+import cn.lineai.feature.models.ProviderListPage;
+import cn.lineai.feature.models.ProviderModelsPage;
 import cn.lineai.feature.workspace.ChangesPage;
 import cn.lineai.feature.workspace.WorkspaceProjectsPage;
 import cn.lineai.feature.workspace.WorkspaceScreens;
@@ -105,22 +107,40 @@ public final class FeaturePageFactory {
                         public boolean revert(String id) { return host.graph().diffs().revert(id); }
                     });
         }
-        if (key.id() == ModelScreens.LIST) return modelListPage();
-        if (key.id() == ModelScreens.OPTIONS) return modelOptionsPage();
-        if (key.id() == ModelScreens.LOCAL) {
-            cn.lineai.core.model.ModelConfig existing = key.args().asMap().containsKey("id")
-                    ? host.graph().models().find(key.args().requireString("id")) : null;
-            return localModelPage(existing);
+        if (key.id() == ModelScreens.LIST) return providerListPage();
+        if (key.id() == ModelScreens.PROVIDER_MODELS) {
+            cn.lineai.core.model.ProviderConfig provider =
+                    host.graph().providers().find(ModelScreens.idOf(key.args()));
+            if (provider == null) {
+                host.unavailable();
+                return providerListPage();
+            }
+            return providerModelsPage(provider);
         }
-        if (key.id() == ModelScreens.EDIT) {
-            cn.lineai.core.model.ModelConfig existing = key.args().asMap().containsKey("id")
-                    ? host.graph().models().find(key.args().requireString("id")) : null;
-            if (existing != null && existing.protocol
-                    == cn.lineai.core.model.ModelConfig.Protocol.LOCAL_GGUF
+        if (key.id() == ModelScreens.PROVIDER_EDIT) {
+            String providerId = ModelScreens.idOf(key.args());
+            cn.lineai.core.model.ProviderConfig provider =
+                    providerId.isEmpty() ? null : host.graph().providers().find(providerId);
+            return providerEditPage(provider);
+        }
+        if (key.id() == ModelScreens.MODEL_EDIT) {
+            cn.lineai.core.model.ModelConfig existing =
+                    host.graph().models().find(ModelScreens.idOf(key.args()));
+            if (existing == null) {
+                host.unavailable();
+                return providerListPage();
+            }
+            if (existing.protocol == cn.lineai.core.model.ModelConfig.Protocol.LOCAL_GGUF
                     && localModels != null) {
                 return localModelPage(existing);
             }
-            return modelEditPage(key, existing);
+            return modelDetailPage(existing,
+                    host.graph().providers().find(existing.providerId));
+        }
+        if (key.id() == ModelScreens.LOCAL) {
+            String modelId = ModelScreens.idOf(key.args());
+            return localModelPage(modelId.isEmpty()
+                    ? null : host.graph().models().find(modelId));
         }
         throw new IllegalArgumentException("Unregistered feature screen: " + key.id().route());
     }
@@ -349,6 +369,10 @@ public final class FeaturePageFactory {
                         host.graph().terminalProviders().delete(id);
                         host.graph().refreshTerminalProviders();
                     }
+                    public void onDownloadExtension() {
+                        host.openLink("https://github.com/OpenLineCode/"
+                                + "LineCodeTerminalExtension/releases");
+                    }
                 });
     }
 
@@ -359,6 +383,7 @@ public final class FeaturePageFactory {
                         return host.graph().projects().list();
                     }
                     public void select(String id) {
+                        clearTerminalWorkspace();
                         host.graph().projects().select(id);
                         host.applyProjectLabel(host.graph().projects().selected());
                     }
@@ -367,6 +392,7 @@ public final class FeaturePageFactory {
                         host.applyProjectLabel(host.graph().projects().selected());
                     }
                     public cn.lineai.core.model.Project create(String name) {
+                        clearTerminalWorkspace();
                         java.io.File root = new java.io.File(host.activity().getFilesDir(),
                                 "workspace");
                         String safe = cn.lineai.feature.workspace.WorkspaceNames.folder(name);
@@ -384,7 +410,6 @@ public final class FeaturePageFactory {
                         return created;
                     }
                     public void openExternal() { host.openExternalWorkspace(); }
-                    public void shareWorkspace() { host.shareWorkspace(); }
                     public String sshAddress() {
                         cn.lineai.core.model.SshConfig config =
                                 new cn.lineai.shell.SshPreferences(
@@ -396,10 +421,45 @@ public final class FeaturePageFactory {
                     public boolean conversationActive() {
                         return host.graph().chat().hasMessages();
                     }
+                    public java.util.List<cn.lineai.core.model.TerminalProviderConfig>
+                            terminalProviders() {
+                        return host.graph().terminalProviders().list();
+                    }
+                    public boolean terminalWorkspaceActive() {
+                        return cn.lineai.feature.settings.McpPreferences.MODE_TERMINAL_PROVIDER
+                                .equals(new cn.lineai.feature.settings.McpPreferences(
+                                        host.graph().settings()).mode());
+                    }
+                    public String selectedTerminalProviderId() {
+                        return host.graph().terminalProviderSelectedId();
+                    }
+                    public void selectTerminalProvider(String providerId) {
+                        new cn.lineai.feature.settings.McpPreferences(host.graph().settings())
+                                .setMode(cn.lineai.feature.settings.McpPreferences
+                                        .MODE_TERMINAL_PROVIDER);
+                        host.graph().selectTerminalProvider(providerId);
+                        cn.lineai.core.model.TerminalProviderConfig selected =
+                                host.graph().selectedTerminalProvider();
+                        String label = selected == null || selected.name.isEmpty()
+                                ? providerId : selected.name;
+                        host.graph().settings().put(
+                                cn.lineai.feature.chat.ChatController.KEY_PROJECT_LABEL, label);
+                        host.graph().chat().refreshModel();
+                    }
+                    public void onTerminalProviders() {
+                        host.navigation().push(ExtensionScreens.TERMINAL_PROVIDERS.key(
+                                Params.Empty.INSTANCE));
+                    }
             public void onChanges() {
                 host.navigation().push(WorkspaceScreens.CHANGES.key(Params.Empty.INSTANCE));
             }
         };
+    }
+
+    /** Returns the workspace selection to a project row after a terminal workspace was active. */
+    private void clearTerminalWorkspace() {
+        new cn.lineai.feature.settings.McpPreferences(host.graph().settings())
+                .setMode(cn.lineai.feature.settings.McpPreferences.MODE_LOCAL);
     }
 
     /** Workspace projects page; cached so SAF results can trigger a reload. */
@@ -409,87 +469,116 @@ public final class FeaturePageFactory {
         return workspacePage;
     }
 
-    /** Model list page with a late loader that re-reads the store on each visit. */
-    private View modelListPage() {
-        ModelListPage page = new ModelListPage(host.activity(), host.tokens(),
-                host.graph().models().list(), selectedModelId(),
-                new ModelListPage.Listener() {
+    /** Provider list root; reloads providers and models on every visit. */
+    private View providerListPage() {
+        ProviderListPage page = new ProviderListPage(host.activity(), host.tokens(),
+                new ProviderListPage.Listener() {
                     public void onBack() { host.navigation().back(); }
-                    public void onAddModel() {
-                        host.navigation().push(ModelScreens.OPTIONS.key(Params.Empty.INSTANCE));
+                    public void onAddProvider() {
+                        host.navigation().push(ModelScreens.PROVIDER_EDIT.key(
+                                ModelScreens.providerEditArgs(null)));
                     }
-                    public void onSelectModel(String id) {
-                        host.graph().models().select(id);
+                    public void onOpenProvider(String providerId) {
+                        host.navigation().push(ModelScreens.PROVIDER_MODELS.key(
+                                ModelScreens.providerArgs(providerId)));
+                    }
+                    public void onEditProvider(String providerId) {
+                        host.navigation().push(ModelScreens.PROVIDER_EDIT.key(
+                                ModelScreens.providerEditArgs(providerId)));
+                    }
+                    public void onDeleteProvider(String providerId,
+                                                 java.util.List<String> modelIds) {
+                        host.graph().models().delete(modelIds);
+                        host.graph().providers().delete(providerId);
                         host.graph().chat().refreshModel();
-                        host.navigation().back();
-                    }
-                    public void onEditModel(String id) {
-                        host.navigation().push(ModelScreens.EDIT.key(
-                                ModelScreens.editArgs(host.graph().models().find(id))));
-                    }
-                    public void onDeleteModels(java.util.List<String> ids) {
-                        host.graph().models().delete(ids);
-                        host.graph().chat().refreshModel();
-                    }
-                }, host.graph().scheduler());
-        page.loader(() -> host.graph().models().list(), this::selectedModelId);
-        return page;
-    }
-
-    /** Model add-options page; the local entry is hidden in the slim build. */
-    private View modelOptionsPage() {
-        return new cn.lineai.feature.models.ModelAddOptionsPage(host.activity(), host.tokens(),
-                host.navigation()::back, new cn.lineai.feature.models.ModelAddOptionsPage.Listener() {
-                    public void onCustom() {
-                        host.navigation().push(ModelScreens.EDIT.key(ModelScreens.editArgs(null)));
-                    }
-                    public void onProvider(String presetId) {
-                        host.navigation().push(ModelScreens.EDIT.key(
-                                ModelScreens.presetArgs(presetId)));
                     }
                     public boolean localModelsAvailable() { return localModels != null; }
-                    public void onLocal() {
+                    public void onLocalModels() {
                         if (localModels == null) {
                             Toast.makeText(host.activity(),
                                     R.string.screen_model_add_local_picker_disabled,
                                     Toast.LENGTH_SHORT).show();
                             return;
                         }
-                        host.navigation().push(ModelScreens.LOCAL.key(Params.Args.empty()));
+                        host.navigation().push(ModelScreens.LOCAL.key(
+                                ModelScreens.localArgs(null)));
+                    }
+                }, host.graph().scheduler());
+        page.loader(() -> host.graph().providers().list(),
+                () -> host.graph().models().list());
+        return page;
+    }
+
+    /** Models of one provider; tapping a row opens the model detail page. */
+    private View providerModelsPage(cn.lineai.core.model.ProviderConfig provider) {
+        ProviderModelsPage page = new ProviderModelsPage(host.activity(), host.tokens(),
+                provider, new ProviderModelsPage.Listener() {
+                    public void onBack() { host.navigation().back(); }
+                    public void onOpenModel(String modelId) {
+                        host.navigation().push(ModelScreens.MODEL_EDIT.key(
+                                ModelScreens.modelArgs(modelId)));
+                    }
+                    public void onAddModels(String providerId) {
+                        host.navigation().push(ModelScreens.PROVIDER_EDIT.key(
+                                ModelScreens.providerEditArgs(providerId)));
+                    }
+                    public void onSetDefault(String modelId) {
+                        host.graph().models().select(modelId);
+                        host.graph().chat().refreshModel();
+                    }
+                    public void onDeleteModel(String modelId) {
+                        host.graph().models().delete(
+                                java.util.Collections.singletonList(modelId));
+                        host.graph().chat().refreshModel();
+                    }
+                }, host.graph().scheduler());
+        page.loader(() -> host.graph().models().list());
+        return page;
+    }
+
+    /** Add or edit a provider, including its fetched and manual model rows. */
+    private View providerEditPage(cn.lineai.core.model.ProviderConfig provider) {
+        return new ProviderEditPage(host.activity(), host.tokens(),
+                host.graph().scheduler(), host.navigation()::back, provider,
+                host.graph().models().list(),
+                new ProviderEditPage.Listener() {
+                    public void onSave(cn.lineai.core.model.ProviderConfig saved,
+                                       java.util.List<cn.lineai.core.model.ModelConfig> models,
+                                       java.util.List<String> deletedModelIds) {
+                        host.graph().providers().save(saved);
+                        for (cn.lineai.core.model.ModelConfig model : models) {
+                            host.graph().models().save(model);
+                        }
+                        if (!deletedModelIds.isEmpty()) {
+                            host.graph().models().delete(deletedModelIds);
+                        }
+                        host.graph().chat().refreshModel();
+                        host.navigation().popTo(ModelScreens.LIST);
+                        host.navigation().push(ModelScreens.PROVIDER_MODELS.key(
+                                ModelScreens.providerArgs(saved.id)));
                     }
                 });
     }
 
-    /** Custom or preset model editor page; saves select the model and pop back. */
-    private View modelEditPage(ScreenKey<?, ?> key, cn.lineai.core.model.ModelConfig existing) {
-        cn.lineai.core.model.ModelPreset preset = key.args().asMap().containsKey("preset")
-                ? cn.lineai.core.model.ModelPreset.find(key.args().requireString("preset")) : null;
-        ModelEditPage page = new ModelEditPage(host.activity(), host.tokens(),
-                host.graph().graph().get(cn.lineai.core.kernel.time.Scheduler.class),
-                host.navigation()::back, existing, preset,
-                (protocol, url, apiKey) -> new cn.lineai.engine.ai.ModelCatalogClient()
-                        .fetch(protocol, url, apiKey),
-                new ModelEditPage.Listener() {
-                    public void onBack() { host.navigation().back(); }
-                    public boolean localModelsAvailable() { return localModels != null; }
+    /** Model detail page; saves and deletes return to the provider model list. */
+    private View modelDetailPage(cn.lineai.core.model.ModelConfig existing,
+                                 cn.lineai.core.model.ProviderConfig provider) {
+        return new ModelDetailPage(host.activity(), host.tokens(),
+                host.graph().scheduler(), host.navigation()::back, existing, provider,
+                new ModelDetailPage.Listener() {
                     public void onSave(cn.lineai.core.model.ModelConfig model) {
                         host.graph().models().save(model);
-                        host.graph().models().select(model.id);
                         host.graph().chat().refreshModel();
-                        host.navigation().popTo(ModelScreens.LIST);
-                    }
-                    public void onTest(cn.lineai.core.model.ModelConfig model) {
-                        host.probeModel(model);
+                        host.navigation().back();
                     }
                 });
-        return page;
     }
 
     /** Local GGUF model page from the optional bridge; falls back when absent. */
     private View localModelPage(cn.lineai.core.model.ModelConfig existing) {
         if (localModels == null) {
             host.unavailable();
-            return modelOptionsPage();
+            return providerListPage();
         }
         localPage = localModels.createPage(host.activity(), host.tokens(),
                 host.navigation()::back, existing, new LocalModelBridge.Listener() {
@@ -507,11 +596,5 @@ public final class FeaturePageFactory {
                     }
                 });
         return localPage.view();
-    }
-
-    /** Id of the currently selected model; empty when none is selected. */
-    private String selectedModelId() {
-        cn.lineai.core.model.ModelConfig selected = host.graph().models().selected();
-        return selected == null ? "" : selected.id;
     }
 }

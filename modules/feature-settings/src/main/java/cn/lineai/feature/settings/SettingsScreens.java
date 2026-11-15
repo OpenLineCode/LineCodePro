@@ -35,6 +35,9 @@ public final class SettingsScreens {
             new ScreenId<>("settings.errorLogs", HOME, true, Params.Empty::fromArgs);
     public static final ScreenId<SettingsState, Params.Empty> DATA =
             new ScreenId<>("settings.data", HOME, true, Params.Empty::fromArgs);
+    /** Token usage statistics over every persisted assistant message. */
+    public static final ScreenId<SettingsState, Params.Empty> STATS =
+            new ScreenId<>("settings.stats", HOME, true, Params.Empty::fromArgs);
     public static final ScreenId<SettingsState, Params.Empty> MCP =
             new ScreenId<>("settings.mcp", HOME, true, Params.Empty::fromArgs);
     public static final ScreenId<SettingsState, Params.Empty> TOOL_SETTINGS =
@@ -70,6 +73,6 @@ public final class SettingsScreens {
     public static void register(ScreenRegistry registry) {
         registry.register(HOME).register(INPUT).register(OUTPUT)
                 .register(BEHAVIOR).register(THEME).register(ABOUT).register(LICENSES)
-                .register(PROMPTS).register(SECURITY).register(ADVANCED).register(KEEP_ALIVE).register(STORAGE).register(ERROR_LOGS).register(DATA).register(MCP).register(TOOL_SETTINGS).register(SSH).register(TERMUX).register(TUTORIAL).register(MEMORY).register(PHONE_CONTROL).register(EXTENSIONS).register(TOOL_PREVIEW);
+                .register(PROMPTS).register(SECURITY).register(ADVANCED).register(KEEP_ALIVE).register(STORAGE).register(ERROR_LOGS).register(DATA).register(STATS).register(MCP).register(TOOL_SETTINGS).register(SSH).register(TERMUX).register(TUTORIAL).register(MEMORY).register(PHONE_CONTROL).register(EXTENSIONS).register(TOOL_PREVIEW);
     }
 }

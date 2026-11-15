@@ -71,6 +71,9 @@ public final class SqliteMessageStore implements MessageStore {
                                 cursor.getInt(cursor.getColumnIndexOrThrow("input_tokens")),
                                 cursor.getInt(cursor.getColumnIndexOrThrow("output_tokens")),
                                 cursor.getInt(cursor.getColumnIndexOrThrow("cached_tokens")))
+                        .timing(
+                                cursor.getLong(cursor.getColumnIndexOrThrow("ttft_ms")),
+                                cursor.getLong(cursor.getColumnIndexOrThrow("duration_ms")))
                         .times(
                                 cursor.getLong(cursor.getColumnIndexOrThrow("created_at")),
                                 cursor.getLong(cursor.getColumnIndexOrThrow("updated_at")))
@@ -131,6 +134,10 @@ public final class SqliteMessageStore implements MessageStore {
                 return ContentBlock.toolCall(refId, status);
             case TOOL_RESULT:
                 return ContentBlock.toolResult(refId);
+            case COMPACT:
+                return ContentBlock.compact(status);
+            case ERROR:
+                return ContentBlock.error(text);
             case DIFF:
             default:
                 return ContentBlock.diff(refId);
@@ -228,6 +235,8 @@ public final class SqliteMessageStore implements MessageStore {
         values.put("input_tokens", message.inputTokens);
         values.put("output_tokens", message.outputTokens);
         values.put("cached_tokens", message.cachedTokens);
+        values.put("ttft_ms", message.ttftMs);
+        values.put("duration_ms", message.durationMs);
         values.put("created_at", message.createdAt);
         values.put("updated_at", message.updatedAt);
         return values;

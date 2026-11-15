@@ -54,6 +54,10 @@ public final class TerminalProvidersPage extends ExtensionPage implements Refres
          * @param id provider identifier
          */
         void delete(String id);
+
+        /** Opens the terminal extension releases page so the user can install the provider app. */
+        default void onDownloadExtension() {
+        }
     }
 
     private final Listener listener;
@@ -87,10 +91,15 @@ public final class TerminalProvidersPage extends ExtensionPage implements Refres
         reload();
     }
 
-    /** Rebuilds the page: installed section, rescan action, and scan results when present. */
+    /** Rebuilds the page: installed section, download action, rescan action and scan results. */
     public void reload() {
         content.removeAllViews();
         installed();
+        SettingsSection download = section(R.string.screen_terminal_provider_download);
+        download.row(ExtensionKit.action(getContext(), theme, Icons.EXTERNAL_LINK,
+                R.string.screen_terminal_provider_download,
+                R.string.screen_terminal_provider_download_desc, 68,
+                listener::onDownloadExtension), false, 0);
         SettingsSection scan = section(R.string.screen_terminal_provider_scan);
         scan.row(ExtensionKit.action(getContext(), theme, Icons.SEARCH,
                 R.string.screen_terminal_provider_scan,

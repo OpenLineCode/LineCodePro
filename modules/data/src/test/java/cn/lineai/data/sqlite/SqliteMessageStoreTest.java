@@ -67,8 +67,7 @@ public class SqliteMessageStoreTest {
         assertEquals(2, messages.count(conversationId));
     }
 
-    @Test public void persistsAssistantToolCallsAndToolResults() {
-        messages.append(Message.builder()
+    @Test public void persistsAssistantToolCallsAndToolResults() {        messages.append(Message.builder()
                 .id("assistant")
                 .conversationId(conversationId)
                 .seq(1)
@@ -101,6 +100,22 @@ public class SqliteMessageStoreTest {
         assertEquals("read_file", loaded.get(1).toolName);
     }
 
+    @Test public void roundTripsTimingMetadata() {
+        messages.append(Message.builder()
+                .id("m1")
+                .conversationId(conversationId)
+                .seq(1)
+                .role(Role.ASSISTANT)
+                .status(Message.Status.COMPLETE)
+                .addBlock(ContentBlock.text("answer"))
+                .timing(320L, 4200L)
+                .times(1, 2)
+                .build());
+        Message loaded = messages.load(conversationId).get(0);
+        assertEquals(320L, loaded.ttftMs);
+        assertEquals(4200L, loaded.durationMs);
+    }
+
     @Test public void updateReplacesBlocksAndToolCalls() {
         messages.append(Message.builder()
                 .id("m")
@@ -127,5 +142,23 @@ public class SqliteMessageStoreTest {
         assertEquals("final", loaded.plainText());
         assertEquals("why", loaded.reasoningText());
         assertTrue(loaded.toolCalls.isEmpty());
+    }
+
+    @Test public void keepsErrorAndCompactBlocksAcrossReload() {
+        messages.append(Message.builder()
+                .id("m")
+                .conversationId(conversationId)
+                .seq(1)
+                .role(Role.ASSISTANT)
+                .status(Message.Status.FAILED)
+                .addBlock(ContentBlock.error("HTTP 401: unauthorized"))
+                .addBlock(ContentBlock.compact("done"))
+                .times(1, 2)
+                .build());
+        Message loaded = messages.load(conversationId).get(0);
+        assertEquals(ContentBlock.Type.ERROR, loaded.blocks.get(0).type);
+        assertEquals("HTTP 401: unauthorized", loaded.blocks.get(0).text);
+        assertEquals(ContentBlock.Type.COMPACT, loaded.blocks.get(1).type);
+        assertEquals("done", loaded.blocks.get(1).status);
     }
 }

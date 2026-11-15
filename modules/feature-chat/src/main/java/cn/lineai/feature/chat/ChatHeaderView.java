@@ -147,7 +147,7 @@ public final class ChatHeaderView extends LinearLayout {
                 Ui.dp(context, ACTION_HEIGHT_DP)));
 
         ring = new ContextRing(context, tokens);
-        ring.setContentDescription(context.getString(R.string.context_usage_title));
+        ring.setContentDescription(context.getString(R.string.session_stats_title));
         ring.setOnClickListener(v -> {
             if (listener != null) {
                 listener.onContext();

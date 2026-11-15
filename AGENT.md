@@ -39,9 +39,14 @@ the original repository. All code now lives under `modules/` (plus the thin `:ap
 
 ## Data
 
-`modules/data/.../LineCodeDatabase` owns schema **VERSION = 15**: conversations, messages,
-message_blocks, message_tool_calls, settings, models, error_logs, memories, extension_agents,
-extension_mcps, ipc_providers, projects, file_diffs. Conversations carry `kind` (`''` user,
+`modules/data/.../LineCodeDatabase` owns schema **VERSION = 16**: conversations, messages,
+message_blocks, message_tool_calls, settings, models, model_providers, error_logs, memories,
+extension_agents, extension_mcps, ipc_providers, projects, file_diffs. Model rows reference a
+`model_providers` row that owns the protocol, base URL, credential and shared request headers;
+`ProviderModelStore` resolves that provider into `ModelConfig` on every read and
+`ProviderBackfill` adopts legacy model rows after a database or archive restore. Messages carry
+`input_tokens/output_tokens/cached_tokens` plus `ttft_ms/duration_ms`; `SqliteUsageStatsStore`
+aggregates them for the statistics page. Conversations carry `kind` (`''` user,
 `agent`, `agent_transient`) and `parent_id`; `ConversationStore.list()` returns user
 conversations only. Stores are synchronous; callers use `Scheduler.io`. `SettingsStore` is write-through with `invalidate()` after archive restore.
 
@@ -54,6 +59,10 @@ modes (`auto`/`confirm`/`readonly`) and session modes (`chat`/`plan`/`agent`/`co
 the tool catalog. MCP tools come from `tools/list` and always require approval; approval decisions
 live in feature-chat's `ApprovalPolicy`. Context compaction summarizes older messages at 80% of the
 model context, or 50% when soft compaction is enabled; the tail boundary never opens on a TOOL row.
+Reasoning levels are per model (`ModelConfig.reasoningLevels`, selected through the
+`model.<configId>.reasoning` setting); the engine records per-request token usage, TTFT and stream
+duration on the assistant row, `TurnAssembler` aggregates them into the per-turn stats line, and
+the old context-usage sheet is the session statistics sheet.
 Minimal mode uses a one-sentence role prompt and skips extension, skill and learning sections;
 learning mode injects memories, recent conversation titles, enabled skills and skill paths through
 feature-chat's `LearningContextProvider`. Thinking scroll/auto-expand and process auto-expand
@@ -169,6 +178,10 @@ pipes cannot be drained with a timeout without a reader thread), `platform-andro
   `versionCode` increases by one for every release. Bump both in the same commit as the changelog.
 - `update.md` is the single changelog, newest version first. Every version section must be
   bilingual: an English part first, then a Chinese part, describing the same changes.
+- `update.md` and pull requests describe only differences from the last published release. Never
+  document a defect that existed only in an unreleased development iteration (for example a
+  regression introduced while developing the branch and fixed before release): remote users never
+  encountered it. Describe shipped behaviour, not development history.
 
 ## Do not / 禁止事项
 

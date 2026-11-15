@@ -112,4 +112,27 @@ public final class ScreenBar extends LinearLayout {
         border.setStrokeWidth(1f);
         canvas.drawLine(0, getHeight() - 1, getWidth(), getHeight() - 1, border);
     }
+
+    /**
+     * Replaces the trailing slot with a custom action view.
+     *
+     * <p>Pages that need a text action such as Save use this instead of the icon slot: the
+     * previous trailing child (icon or spacer) is removed so the custom view truly owns the
+     * right edge, and the leading button plus title stay untouched.</p>
+     *
+     * @param action view placed at the trailing edge; null restores the default spacer
+     */
+    public void trailingAction(android.view.View action) {
+        if (getChildCount() == 0) {
+            return;
+        }
+        removeViewAt(getChildCount() - 1);
+        if (action != null) {
+            addView(action, new LayoutParams(LayoutParams.WRAP_CONTENT,
+                    LayoutParams.WRAP_CONTENT));
+        } else {
+            addView(new android.view.View(getContext()),
+                    new LayoutParams(Ui.dp(getContext(), 36), Ui.dp(getContext(), 36)));
+        }
+    }
 }

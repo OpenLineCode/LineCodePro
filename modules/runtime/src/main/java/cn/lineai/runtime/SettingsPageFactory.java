@@ -3,10 +3,13 @@ package cn.lineai.runtime;
 import android.content.ActivityNotFoundException;
 import android.content.Intent;
 import android.view.View;
+import android.widget.Toast;
 
 import cn.lineai.core.kernel.time.Scheduler;
+import cn.lineai.core.model.ModelProfile;
 import cn.lineai.core.mvi.nav.Params;
 import cn.lineai.core.mvi.nav.ScreenKey;
+import cn.lineai.data.api.UsageStats;
 import cn.lineai.feature.extensions.ExtensionScreens;
 import cn.lineai.feature.settings.AboutPage;
 import cn.lineai.feature.settings.AdvancedFeaturesPage;
@@ -25,10 +28,12 @@ import cn.lineai.feature.settings.PhoneControlPage;
 import cn.lineai.feature.settings.PhoneControlPreferences;
 import cn.lineai.feature.settings.PromptTemplatesCatalog;
 import cn.lineai.feature.settings.PromptTemplatesPage;
+import cn.lineai.feature.settings.ReleaseInfo;
 import cn.lineai.feature.settings.SecuritySettingsPage;
 import cn.lineai.feature.settings.SettingsHome;
 import cn.lineai.feature.settings.SettingsScreens;
 import cn.lineai.feature.settings.SshSettingsPage;
+import cn.lineai.feature.settings.StatsPage;
 import cn.lineai.feature.settings.StorageManagementPage;
 import cn.lineai.feature.settings.TermuxIntegrationPage;
 import cn.lineai.feature.settings.ThemePreferences;
@@ -36,6 +41,10 @@ import cn.lineai.feature.settings.ThemeSettingsPage;
 import cn.lineai.feature.settings.ToolPreferences;
 import cn.lineai.feature.settings.ToolSettingsPage;
 import cn.lineai.feature.settings.TutorialPage;
+import cn.lineai.feature.settings.UpdateChecker;
+import cn.lineai.feature.settings.UpdateDialog;
+import cn.lineai.feature.settings.UpdatePreferences;
+import cn.lineai.feature.settings.VersionNumbers;
 import cn.lineai.shell.SshPreferences;
 import cn.lineai.shell.SshService;
 import cn.lineai.shell.TermuxClient;
@@ -165,6 +174,7 @@ public final class SettingsPageFactory {
                         public void onImport() { host.requestImport(); }
                     });
         }
+        if (key.id() == SettingsScreens.STATS) return statsPage();
         if (key.id() == SettingsScreens.ERROR_LOGS) return errorLogsPage();
         if (key.id() == SettingsScreens.STORAGE) return storagePage();
         if (key.id() == SettingsScreens.KEEP_ALIVE) return keepAlivePage();
@@ -358,6 +368,22 @@ public final class SettingsPageFactory {
                 });
     }
 
+    /** Aggregated token usage page; loads the snapshot and model labels from the graph. */
+    private View statsPage() {
+        StatsPage.Loader loader = new StatsPage.Loader() {
+            public UsageStats load() {
+                return host.graph().usageStats().load();
+            }
+
+            public String modelName(String modelId) {
+                cn.lineai.core.model.ModelConfig model = host.graph().models().find(modelId);
+                return model == null ? ModelProfile.displayName(modelId) : model.displayName();
+            }
+        };
+        return new StatsPage(host.activity(), host.tokens(), host.navigation()::back,
+                host.graph().scheduler(), loader);
+    }
+
     /** Error log list page; clearing resets the rendered list immediately. */
     private View errorLogsPage() {
         final ErrorLogsPage[] holder = new ErrorLogsPage[1];
@@ -457,9 +483,39 @@ public final class SettingsPageFactory {
     private View aboutPage() {
         return new AboutPage(host.activity(), host.tokens(), host.navigation()::back,
                 AppInfo.label(host.activity()), AppInfo.versionName(host.activity()),
-                AppInfo.versionCode(host.activity()),
-                () -> host.openLink("https://github.com/LangLang03/LineCodePro"),
-                () -> host.navigation().push(SettingsScreens.LICENSES.key(Params.Empty.INSTANCE)));
+                AppInfo.versionCode(host.activity()), new AboutPage.Listener() {
+                    public void openGithub() {
+                        host.openLink("https://github.com/LangLang03/LineCodePro");
+                    }
+                    public void openLicenses() {
+                        host.navigation().push(SettingsScreens.LICENSES.key(
+                                Params.Empty.INSTANCE));
+                    }
+                    public void checkForUpdates() { checkForUpdates(); }
+                });
+    }
+
+    /** Checks the latest GitHub release on io and renders the dialog or a status toast. */
+    private void checkForUpdates() {
+        Toast.makeText(host.activity(), R.string.update_checking, Toast.LENGTH_SHORT).show();
+        Scheduler scheduler = host.graph().scheduler();
+        String current = AppInfo.versionName(host.activity());
+        scheduler.io(() -> {
+            ReleaseInfo release = UpdateChecker.latest();
+            scheduler.main(() -> {
+                if (release == null) {
+                    Toast.makeText(host.activity(), R.string.update_check_failed,
+                            Toast.LENGTH_LONG).show();
+                } else if (VersionNumbers.isNewer(release.version, current)) {
+                    UpdateDialog.show(host.activity(), host.tokens(), release,
+                            new UpdatePreferences(host.graph().settings()),
+                            () -> host.openLink(release.htmlUrl));
+                } else {
+                    Toast.makeText(host.activity(), R.string.update_up_to_date,
+                            Toast.LENGTH_SHORT).show();
+                }
+            });
+        });
     }
 
     /** Theme page persisting mode and custom colors and applying them immediately. */

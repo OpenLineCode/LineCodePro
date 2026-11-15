@@ -14,14 +14,13 @@ import java.util.List;
 import java.util.function.Consumer;
 
 /**
- * LLM behavior settings: reasoning effort, learning toggles, tone, and thinking display.
+ * LLM behavior settings: learning toggles, tone, prompts, and thinking display.
  *
  * <p>Every control dispatches a {@link SettingsAction.Change}; the page is stateless between
  * renders and reflects whatever the latest {@link SettingsState} says.</p>
  */
 public final class BehaviorSettingsPage extends SettingsPage {
     private final Consumer<SettingsAction> dispatch;
-    private final List<Choice> reasoning = new ArrayList<>();
     private final List<Choice> tones = new ArrayList<>();
     private final PreferenceRow minimal;
     private final PreferenceRow learning;
@@ -44,20 +43,6 @@ public final class BehaviorSettingsPage extends SettingsPage {
                                 Consumer<SettingsAction> dispatch, Runnable promptTemplates) {
         super(context, R.string.screen_llm_title, tokens, back);
         this.dispatch = dispatch;
-        SettingsSection thinking = section(R.string.screen_llm_section_thinking);
-        choice(thinking, reasoning, Field.REASONING, "off", R.string.screen_llm_thinking_off_label,
-                R.string.screen_llm_thinking_off_desc, true);
-        choice(thinking, reasoning, Field.REASONING, "auto", R.string.screen_llm_thinking_auto_label,
-                R.string.screen_llm_thinking_auto, true);
-        choice(thinking, reasoning, Field.REASONING, "low", R.string.screen_llm_thinking_low_label,
-                R.string.screen_llm_thinking_low, true);
-        choice(thinking, reasoning, Field.REASONING, "medium", R.string.screen_llm_thinking_medium_label,
-                R.string.screen_llm_thinking_medium, true);
-        choice(thinking, reasoning, Field.REASONING, "high", R.string.screen_llm_thinking_high_label,
-                R.string.screen_llm_thinking_high, true);
-        choice(thinking, reasoning, Field.REASONING, "max", R.string.screen_llm_thinking_max_label,
-                R.string.screen_llm_thinking_max, false);
-
         SettingsSection learningSection = section(R.string.screen_llm_section_learning);
         minimal = toggle(learningSection, Icons.ZAP, R.string.screen_llm_minimal_mode_label,
                 R.string.screen_llm_minimal_mode_desc, Field.MINIMAL_MODE, true);
@@ -86,12 +71,6 @@ public final class BehaviorSettingsPage extends SettingsPage {
                 R.string.screen_llm_step_thinking_desc, Field.STEP_THINKING, true);
         preserve = toggle(display, Icons.BRAIN, R.string.screen_llm_keep_reasoning_label,
                 R.string.screen_llm_keep_reasoning_desc, Field.PRESERVE_REASONING, false);
-    }
-
-    /** Adds an option choice row using the default icon. */
-    private void choice(SettingsSection section, List<Choice> group, Field field, String value,
-                        int label, int description, boolean divider) {
-        choice(section, group, field, value, label, description, divider, Icons.SPARKLES);
     }
 
     /** Adds an option choice row that dispatches a change and marks itself active. */
@@ -126,9 +105,6 @@ public final class BehaviorSettingsPage extends SettingsPage {
      * @param state current settings state from the presenter
      */
     public void render(SettingsState state) {
-        for (Choice item : reasoning) {
-            item.row.active(item.value.equals(state.values.get(Field.REASONING)));
-        }
         for (Choice item : tones) {
             item.row.active(item.value.equals(state.values.get(Field.TONE)));
         }

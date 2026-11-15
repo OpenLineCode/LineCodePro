@@ -1,5 +1,9 @@
 package cn.lineai.core.model;
 
+import java.util.ArrayList;
+import java.util.Collections;
+import java.util.List;
+
 /** Immutable model configuration. Secrets live in the same row; the UI never logs this object. */
 public final class ModelConfig {
 
@@ -58,6 +62,12 @@ public final class ModelConfig {
     public final String compressionModelId;
     public final String localModelPath;
     public final String localAcceleration;
+    /** Explicit wire field for reasoning levels; empty selects the protocol policy. */
+    public final String reasoningField;
+    /** Selectable reasoning levels in display order; empty falls back to the family profile. */
+    public final List<ReasoningLevel> reasoningLevels;
+    /** Model-level HTTP headers merged after the provider headers. */
+    public final List<HttpHeader> headers;
 
     /** Sentinel passed to {@link Builder#toolCalls(int)} to disable the per-turn call cap. */
     public static final int UNLIMITED_TOOL_CALLS = -1;
@@ -92,6 +102,9 @@ public final class ModelConfig {
         this.compressionModelId = orEmpty(b.compressionModelId);
         this.localModelPath = orEmpty(b.localModelPath);
         this.localAcceleration = orEmpty(b.localAcceleration);
+        this.reasoningField = orEmpty(b.reasoningField);
+        this.reasoningLevels = Collections.unmodifiableList(new ArrayList<>(b.reasoningLevels));
+        this.headers = Collections.unmodifiableList(new ArrayList<>(b.headers));
     }
 
     /**
@@ -129,7 +142,9 @@ public final class ModelConfig {
                 .sampling(temperature, reasoningEffort)
                 .flags(isDefault, enabled)
                 .capabilities(supportsVision, supportsTools)
-                .multimodal(supportsReasoning, supportsVision, supportsVideo);
+                .multimodal(supportsReasoning, supportsVision, supportsVideo)
+                .reasoningLevels(reasoningLevels)
+                .advanced(reasoningField, headers);
     }
 
     /** Returns a new builder with the documented defaults. */
@@ -163,6 +178,9 @@ public final class ModelConfig {
         private String compressionModelId = "";
         private String localModelPath = "";
         private String localAcceleration = "automatic";
+        private String reasoningField = "";
+        private List<ReasoningLevel> reasoningLevels = new ArrayList<>();
+        private List<HttpHeader> headers = new ArrayList<>();
 
         /**
          * Sets the stored identity.
@@ -243,6 +261,29 @@ public final class ModelConfig {
          */
         public Builder secret(String value) {
             apiKey = value == null ? "" : value;
+            return this;
+        }
+
+        /**
+         * Sets the selectable reasoning levels.
+         * @param value levels in display order, null yields an empty list
+         * @return this builder
+         */
+        public Builder reasoningLevels(List<ReasoningLevel> value) {
+            reasoningLevels = value == null
+                    ? new ArrayList<ReasoningLevel>() : new ArrayList<>(value);
+            return this;
+        }
+
+        /**
+         * Sets the advanced reasoning field override and the model-level headers.
+         * @param field explicit wire field path, empty selects the protocol policy
+         * @param values headers merged after the provider headers, null yields an empty list
+         * @return this builder
+         */
+        public Builder advanced(String field, List<HttpHeader> values) {
+            reasoningField = field == null ? "" : field.trim();
+            headers = values == null ? new ArrayList<HttpHeader>() : new ArrayList<>(values);
             return this;
         }
 

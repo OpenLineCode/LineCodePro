@@ -55,6 +55,8 @@ public final class TerminalProviderGateway {
 
     private static final int PROBE_TIMEOUT_MS = 20_000;
     private static final String TAG = "TerminalProviderGateway";
+    /** Settings key holding the provider app the user selected as the workspace. */
+    public static final String SELECTED_PROVIDER_KEY = "terminal.providerId";
 
     private final Context context;
     private final SettingsStore settings;
@@ -150,8 +152,12 @@ public final class TerminalProviderGateway {
         return STATE_NONE;
     }
 
-    /** Display name of the active or first enabled provider; empty when none exists. */
+    /** Display name of the selected, active or first enabled provider; empty when none exists. */
     public String providerName() {
+        TerminalProviderConfig selected = selectedConfig();
+        if (selected != null) {
+            return selected.name;
+        }
         TerminalIpcProvider provider = active;
         if (provider != null && provider.getConfig() != null) {
             return provider.getConfig().getName();
@@ -167,6 +173,47 @@ public final class TerminalProviderGateway {
     /** Home path reported by the active provider; empty when unknown or unbound. */
     public String home() {
         return activeHome;
+    }
+
+    /** Identifier of the provider app selected as the workspace; empty when none is selected. */
+    public String selectedProviderId() {
+        return settings.get(SELECTED_PROVIDER_KEY, "");
+    }
+
+    /** Returns the configuration of the selected workspace provider, or null when unset. */
+    public TerminalProviderConfig selectedConfig() {
+        String id = selectedProviderId();
+        if (id.isEmpty()) {
+            return null;
+        }
+        for (TerminalProviderConfig config : store.list()) {
+            if (config.id.equals(id)) {
+                return config;
+            }
+        }
+        return null;
+    }
+
+    /**
+     * Selects one provider application as the workspace and reconnects it.
+     *
+     * <p>The choice is persisted so the workspace survives restarts; the active connection is
+     * switched immediately when the provider is already bound, otherwise the regular discovery
+     * pass promotes it as soon as it connects.</p>
+     *
+     * @param providerId provider configuration identifier, or empty to clear the preference
+     */
+    public void select(String providerId) {
+        settings.put(SELECTED_PROVIDER_KEY, providerId == null ? "" : providerId);
+        TerminalIpcProvider preferred = boundById.get(selectedProviderId());
+        if (preferred != null && preferred.isBound()) {
+            activate(preferred);
+            return;
+        }
+        active = null;
+        activeHome = "";
+        pickConnectedProvider();
+        refresh();
     }
 
     /**
@@ -379,10 +426,15 @@ public final class TerminalProviderGateway {
         pickConnectedProvider();
     }
 
-    /** Promotes the first bound provider to active, or clears the active connection. */
+    /** Promotes the selected or first bound provider to active, or clears the active connection. */
     private void pickConnectedProvider() {
         TerminalIpcProvider current = active;
         if (current != null && current.isBound()) {
+            return;
+        }
+        TerminalIpcProvider preferred = boundById.get(selectedProviderId());
+        if (preferred != null && preferred.isBound()) {
+            activate(preferred);
             return;
         }
         for (TerminalIpcProvider provider : boundById.values()) {

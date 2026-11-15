@@ -89,6 +89,20 @@ public final class TurnAssembler {
         public final long processingStartedAt;
         /** Latest updatedAt across the turn; 0 while the row is live. */
         public final long processingFinishedAt;
+        /** Summed prompt tokens of the turn; 0 while the row is live. */
+        public final int inputTokens;
+        /** Summed completion tokens of the turn; 0 while the row is live. */
+        public final int outputTokens;
+        /** Summed cached prompt tokens of the turn; 0 while the row is live. */
+        public final int cachedTokens;
+        /** Total consumed tokens of the turn: input plus output; 0 while the row is live. */
+        public final int totalTokens;
+        /** Time to first token of the turn's first measured request; 0 when unknown or live. */
+        public final long ttftMs;
+        /** Summed model stream time of the turn; 0 when unknown or live. */
+        public final long turnDurationMs;
+        /** Number of tool calls requested by the turn. */
+        public final int toolCallCount;
         /** Everything the row draws; identical signatures skip a rebind. */
         public final String signature;
 
@@ -108,6 +122,13 @@ public final class TurnAssembler {
             this.failed = draft.failed;
             this.processingStartedAt = draft.startedAt;
             this.processingFinishedAt = draft.finishedAt;
+            this.inputTokens = draft.inputTokens;
+            this.outputTokens = draft.outputTokens;
+            this.cachedTokens = draft.cachedTokens;
+            this.totalTokens = draft.totalTokens;
+            this.ttftMs = draft.ttftMs;
+            this.turnDurationMs = draft.turnDurationMs;
+            this.toolCallCount = draft.toolCallCount;
             this.signature = buildSignature();
         }
 
@@ -127,6 +148,13 @@ public final class TurnAssembler {
             boolean failed;
             long startedAt;
             long finishedAt;
+            int inputTokens;
+            int outputTokens;
+            int cachedTokens;
+            int totalTokens;
+            long ttftMs;
+            long turnDurationMs;
+            int toolCallCount;
         }
 
         /** Serializes every rendered aspect of the row into a comparable signature string. */
@@ -134,7 +162,11 @@ public final class TurnAssembler {
             StringBuilder value = new StringBuilder(key).append('\u0001').append(user)
                     .append('\u0001').append(live).append(running).append(pending).append(failed)
                     .append('\u0001').append(processingStartedAt).append('/')
-                    .append(processingFinishedAt);
+                    .append(processingFinishedAt)
+                    .append('\u0001').append(inputTokens).append('/').append(outputTokens)
+                    .append('/').append(cachedTokens).append('/').append(totalTokens)
+                    .append('/').append(ttftMs).append('/').append(turnDurationMs)
+                    .append('/').append(toolCallCount);
             if (userMessage != null) {
                 value.append('\u0001').append(userMessage.plainText());
                 for (ContentBlock block : userMessage.blocks) {
@@ -165,6 +197,11 @@ public final class TurnAssembler {
         /** True when the turn has folded process items to disclose. */
         public boolean hasProcess() {
             return !process.isEmpty();
+        }
+
+        /** True when the row carries token accounting for the compact statistics line. */
+        public boolean hasStats() {
+            return totalTokens > 0;
         }
 
         /** True when the row has something to draw at all. */
@@ -313,6 +350,29 @@ public final class TurnAssembler {
         if (running || finishedAt < startedAt) {
             finishedAt = 0L;
         }
+        int inputTokens = 0;
+        int outputTokens = 0;
+        int cachedTokens = 0;
+        long ttftMs = 0L;
+        long turnDurationMs = 0L;
+        for (Message message : turn) {
+            inputTokens += Math.max(0, message.inputTokens);
+            outputTokens += Math.max(0, message.outputTokens);
+            cachedTokens += Math.max(0, message.cachedTokens);
+            if (ttftMs == 0L && message.ttftMs > 0L) {
+                ttftMs = message.ttftMs;
+            }
+            turnDurationMs += Math.max(0L, message.durationMs);
+        }
+        // A live row must not show a partial statistics line, so its accounting stays zero
+        // until the turn finishes; the signature then flips and the row rebinds.
+        if (live) {
+            inputTokens = 0;
+            outputTokens = 0;
+            cachedTokens = 0;
+            ttftMs = 0L;
+            turnDurationMs = 0L;
+        }
         Row.Draft draft = new Row.Draft();
         draft.key = "t:" + turn.get(0).id;
         draft.subject = answer == null ? turn.get(0) : answer;
@@ -326,6 +386,13 @@ public final class TurnAssembler {
         draft.failed = failed;
         draft.startedAt = startedAt;
         draft.finishedAt = finishedAt;
+        draft.inputTokens = inputTokens;
+        draft.outputTokens = outputTokens;
+        draft.cachedTokens = cachedTokens;
+        draft.totalTokens = inputTokens + outputTokens;
+        draft.ttftMs = ttftMs;
+        draft.turnDurationMs = turnDurationMs;
+        draft.toolCallCount = all.size();
         rows.add(new Row(draft));
         turn.clear();
     }

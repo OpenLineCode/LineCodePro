@@ -5,6 +5,10 @@ import android.database.Cursor;
 import android.database.sqlite.SQLiteDatabase;
 import android.database.sqlite.SQLiteException;
 
+import org.json.JSONArray;
+import org.json.JSONException;
+import org.json.JSONObject;
+
 import java.util.ArrayList;
 import java.util.List;
 
@@ -12,6 +16,7 @@ import cn.lineai.core.kernel.error.DomainException;
 import cn.lineai.core.kernel.error.ErrorCode;
 import cn.lineai.core.kernel.util.Ids;
 import cn.lineai.core.model.ModelConfig;
+import cn.lineai.core.model.ReasoningLevel;
 import cn.lineai.data.api.ModelStore;
 import cn.lineai.data.api.SettingsStore;
 
@@ -238,6 +243,9 @@ public final class SqliteModelStore implements ModelStore {
         values.put("compression_model_id", model.compressionModelId);
         values.put("local_model_path", model.localModelPath);
         values.put("local_acceleration", model.localAcceleration);
+        values.put("reasoning_levels", joinLevels(model.reasoningLevels));
+        values.put("reasoning_field", model.reasoningField);
+        values.put("headers", HeaderCodec.encode(model.headers));
         return values;
     }
 
@@ -270,7 +278,47 @@ public final class SqliteModelStore implements ModelStore {
                 .multimodal(cursor.getInt(cursor.getColumnIndexOrThrow("supports_reasoning")) == 1,
                         cursor.getInt(cursor.getColumnIndexOrThrow("supports_vision")) == 1,
                         cursor.getInt(cursor.getColumnIndexOrThrow("supports_video")) == 1)
+                .reasoningLevels(levels(
+                        cursor.getString(cursor.getColumnIndexOrThrow("reasoning_levels"))))
+                .advanced(cursor.getString(cursor.getColumnIndexOrThrow("reasoning_field")),
+                        HeaderCodec.decode(
+                                cursor.getString(cursor.getColumnIndexOrThrow("headers"))))
                 .build();
+    }
+
+    /** Encodes the selectable reasoning levels as a JSON array of preset/label/value objects. */
+    private static String joinLevels(List<ReasoningLevel> levels) {
+        try {
+            JSONArray array = new JSONArray();
+            for (ReasoningLevel level : levels) {
+                JSONObject entry = new JSONObject();
+                entry.put("preset", level.preset);
+                entry.put("label", level.label);
+                entry.put("value", level.value);
+                array.put(entry);
+            }
+            return array.toString();
+        } catch (JSONException error) {
+            throw new DomainException(ErrorCode.STORAGE, "encode reasoning levels", error);
+        }
+    }
+
+    /** Parses the stored reasoning levels; malformed storage degrades to an empty list. */
+    private static List<ReasoningLevel> levels(String raw) {
+        List<ReasoningLevel> result = new ArrayList<>();
+        if (raw == null || raw.isEmpty()) return result;
+        try {
+            JSONArray array = new JSONArray(raw);
+            for (int i = 0; i < array.length(); i++) {
+                JSONObject entry = array.getJSONObject(i);
+                result.add(new ReasoningLevel(entry.optString("preset"),
+                        entry.optString("label"), entry.optString("value")));
+            }
+        } catch (JSONException error) {
+            // A hand-edited or truncated column must not make the whole model list unreadable.
+            result.clear();
+        }
+        return result;
     }
 
     /** Parses the stored protocol, falling back to the OpenAI-compatible default. */

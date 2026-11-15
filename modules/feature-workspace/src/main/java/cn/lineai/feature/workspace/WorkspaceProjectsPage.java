@@ -11,6 +11,7 @@ import android.widget.Toast;
 import java.util.List;
 
 import cn.lineai.core.model.Project;
+import cn.lineai.core.model.TerminalProviderConfig;
 import cn.lineai.ui.i18n.R;
 import cn.lineai.ui.kit.Dialogs;
 import cn.lineai.ui.kit.FormField;
@@ -67,10 +68,6 @@ public final class WorkspaceProjectsPage extends SettingsPage {
         /** Reports that the open-in-files-app action was requested. */
         void openExternal();
 
-        /** Opens the system picker so another app can read/write this workspace. */
-        default void shareWorkspace() {
-        }
-
         /** Reports that the changes view was requested. */
         void onChanges();
 
@@ -82,6 +79,29 @@ public final class WorkspaceProjectsPage extends SettingsPage {
         /** True when the current conversation already has messages. */
         default boolean conversationActive() {
             return false;
+        }
+
+        /** Installed terminal providers offered as remote workspaces; never null in the app. */
+        default List<TerminalProviderConfig> terminalProviders() {
+            return java.util.Collections.emptyList();
+        }
+
+        /** True when the active workspace is a terminal provider rather than a project row. */
+        default boolean terminalWorkspaceActive() {
+            return false;
+        }
+
+        /** Identifier of the selected terminal provider, or empty when none is selected. */
+        default String selectedTerminalProviderId() {
+            return "";
+        }
+
+        /** Switches the workspace to one terminal provider application. */
+        default void selectTerminalProvider(String providerId) {
+        }
+
+        /** Opens the terminal provider management page. */
+        default void onTerminalProviders() {
         }
     }
 
@@ -112,21 +132,137 @@ public final class WorkspaceProjectsPage extends SettingsPage {
     public void reload() {
         content.removeAllViews();
         List<Project> projects = listener.list();
-        if (projects.isEmpty()) {
-            TextView empty = Ui.text(getContext(),
-                    getContext().getString(R.string.workspace_empty),
-                    Tokens.FONT_MD, theme.current().textTertiary, Typeface.NORMAL);
-            empty.setGravity(Gravity.CENTER);
-            Ui.padding(empty, 16, 32, 16, 32);
-            content.addView(empty, new LayoutParams(-1, -2));
-        } else {
-            for (Project project : projects) {
-                content.addView(row(project), rowParams());
-            }
+        List<Project> local = new java.util.ArrayList<>();
+        List<Project> ssh = new java.util.ArrayList<>();
+        for (Project project : projects) {
+            if (isSsh(project)) ssh.add(project);
+            else local.add(project);
         }
+        sectionLabel(R.string.workspace_section_local);
+        addProjectRows(local, true);
+        sectionLabel(R.string.workspace_section_ssh);
+        addProjectRows(ssh, false);
+        sectionLabel(R.string.workspace_section_terminal);
+        addTerminalProviders();
         content.addView(changesCard(), cardParams());
         content.addView(externalCard(), cardParams());
         content.addView(createCard(), cardParams());
+    }
+
+    /** Adds one project group; an empty group shows its dedicated caption. */
+    private void addProjectRows(List<Project> projects, boolean localGroup) {
+        if (projects.isEmpty()) {
+            addEmpty(localGroup ? R.string.workspace_empty : R.string.workspace_ssh_empty);
+            return;
+        }
+        for (Project project : projects) content.addView(row(project), rowParams());
+    }
+
+    /** Adds the terminal provider workspace group with a management action. */
+    private void addTerminalProviders() {
+        List<TerminalProviderConfig> providers = listener.terminalProviders();
+        boolean active = listener.terminalWorkspaceActive();
+        String selectedId = listener.selectedTerminalProviderId();
+        if (providers == null || providers.isEmpty()) {
+            addEmpty(R.string.workspace_terminal_empty);
+        } else {
+            for (TerminalProviderConfig provider : providers) {
+                if (!provider.enabled) continue;
+                content.addView(terminalRow(provider, active && provider.id.equals(selectedId)),
+                        rowParams());
+            }
+        }
+        LinearLayout manage = new LinearLayout(getContext());
+        manage.setGravity(Gravity.CENTER);
+        manage.setClickable(true);
+        manage.setBackground(Ui.roundedStroke(getContext(), theme.current().surfaceLight, 10,
+                theme.current().border));
+        manage.addView(Ui.bold(getContext(), getContext().getString(
+                R.string.workspace_terminal_manage), Tokens.FONT_SM,
+                theme.current().textSecondary), new LayoutParams(-2, -2));
+        manage.setOnClickListener(v -> listener.onTerminalProviders());
+        Ui.padding(manage, 12, 10, 12, 10);
+        content.addView(manage, rowParams());
+    }
+
+    /** Adds a small group heading above one workspace category. */
+    private void sectionLabel(int label) {
+        TextView title = Ui.medium(getContext(), getContext().getString(label),
+                Tokens.FONT_SM, theme.current().textSecondary);
+        LinearLayout.LayoutParams params = new LinearLayout.LayoutParams(-1, -2);
+        params.topMargin = Ui.dp(getContext(), 16);
+        params.bottomMargin = Ui.dp(getContext(), 8);
+        params.leftMargin = Ui.dp(getContext(), 4);
+        content.addView(title, params);
+        theme.bind(t -> title.setTextColor(t.textSecondary));
+    }
+
+    /** Adds one centered empty-state caption. */
+    private void addEmpty(int label) {
+        TextView empty = Ui.text(getContext(), getContext().getString(label), Tokens.FONT_SM,
+                theme.current().textTertiary, Typeface.NORMAL);
+        empty.setGravity(Gravity.CENTER);
+        Ui.padding(empty, 16, 18, 16, 18);
+        content.addView(empty, rowParams());
+        theme.bind(t -> empty.setTextColor(t.textTertiary));
+    }
+
+    /** Builds one selectable terminal provider workspace row. */
+    private LinearLayout terminalRow(TerminalProviderConfig provider, boolean selected) {
+        Context context = getContext();
+        Tokens tokens = theme.current();
+        LinearLayout row = new LinearLayout(context);
+        row.setGravity(Gravity.CENTER_VERTICAL);
+        row.setBackground(Ui.roundedStroke(context,
+                selected ? tokens.inputBg : tokens.surfaceElevated, 12,
+                selected ? tokens.accent : tokens.border));
+        Ui.padding(row, 14, 12, 12, 12);
+        row.setClickable(true);
+        row.setOnClickListener(v -> {
+            if (listener.conversationActive()) {
+                showSwitchBlocked();
+                return;
+            }
+            listener.selectTerminalProvider(provider.id);
+            reload();
+        });
+        FrameLayout iconBox = new FrameLayout(context);
+        iconBox.setBackground(Ui.rounded(context, tokens.accentMuted, 18));
+        IconButton icon = new IconButton(context, Icons.TERMINAL);
+        icon.setIconColor(tokens.accent);
+        icon.setIconSizeDp(36, 18);
+        icon.setClickable(false);
+        iconBox.addView(icon, new FrameLayout.LayoutParams(
+                Ui.dp(context, 36), Ui.dp(context, 36), Gravity.CENTER));
+        row.addView(iconBox, new LinearLayout.LayoutParams(Ui.dp(context, 36), Ui.dp(context, 36)));
+        LinearLayout labels = new LinearLayout(context);
+        labels.setOrientation(LinearLayout.VERTICAL);
+        LinearLayout.LayoutParams labelParams = new LinearLayout.LayoutParams(0, -2, 1f);
+        labelParams.leftMargin = labelParams.rightMargin = Ui.dp(context, 12);
+        row.addView(labels, labelParams);
+        labels.addView(Ui.bold(context, provider.name, Tokens.FONT_MD, tokens.text),
+                new LinearLayout.LayoutParams(-1, -2));
+        TextView detail = Ui.text(context, provider.packageName, Tokens.FONT_XS,
+                tokens.textTertiary, Typeface.NORMAL);
+        detail.setSingleLine(true);
+        detail.setEllipsize(android.text.TextUtils.TruncateAt.MIDDLE);
+        LinearLayout.LayoutParams detailParams = new LinearLayout.LayoutParams(-1, -2);
+        detailParams.topMargin = Ui.dp(context, 2);
+        labels.addView(detail, detailParams);
+        if (selected) {
+            TextView badge = Ui.medium(context, context.getString(R.string.workspace_selected),
+                    Tokens.FONT_XS, tokens.accent);
+            badge.setBackground(Ui.rounded(context, tokens.accentMuted, 999));
+            Ui.padding(badge, 8, 3, 8, 3);
+            row.addView(badge, new LinearLayout.LayoutParams(-2, -2));
+        }
+        theme.bind(t -> {
+            row.setBackground(Ui.roundedStroke(context,
+                    selected ? t.inputBg : t.surfaceElevated, 12,
+                    selected ? t.accent : t.border));
+            detail.setTextColor(t.textTertiary);
+        });
+        return row;
     }
 
     /**
@@ -138,17 +274,18 @@ public final class WorkspaceProjectsPage extends SettingsPage {
         Context context = getContext();
         Tokens tokens = theme.current();
         boolean ssh = isSsh(project);
+        boolean selected = project.selected && !listener.terminalWorkspaceActive();
         String address = listener.sshAddress();
         String subtitle = ssh && !address.isEmpty() ? address : project.path;
         LinearLayout row = new LinearLayout(context);
         row.setGravity(Gravity.CENTER_VERTICAL);
         row.setBackground(Ui.roundedStroke(context,
-                project.selected ? tokens.inputBg : tokens.surfaceElevated, 12,
-                project.selected ? tokens.accent : tokens.border));
+                selected ? tokens.inputBg : tokens.surfaceElevated, 12,
+                selected ? tokens.accent : tokens.border));
         Ui.padding(row, 14, 12, 12, 12);
         row.setClickable(true);
         row.setOnClickListener(v -> {
-            if (project.selected) {
+            if (selected) {
                 return;
             }
             if (listener.conversationActive()) {
@@ -162,7 +299,8 @@ public final class WorkspaceProjectsPage extends SettingsPage {
             if (Project.DEFAULT_ID.equals(project.id)) return true;
             Dialogs.confirm(context, theme.current(),
                     context.getString(R.string.drawer_project_remove_title),
-                    context.getString(R.string.drawer_project_remove_message, project.name),
+                    context.getString(R.string.drawer_project_remove_message,
+                            WorkspaceNames.label(context, project)),
                     context.getString(R.string.common_cancel),
                     context.getString(R.string.common_delete),
                     confirmed -> {
@@ -189,8 +327,8 @@ public final class WorkspaceProjectsPage extends SettingsPage {
         LinearLayout.LayoutParams labelParams = new LinearLayout.LayoutParams(0, -2, 1f);
         labelParams.leftMargin = labelParams.rightMargin = Ui.dp(context, 12);
         row.addView(labels, labelParams);
-        labels.addView(Ui.bold(context, project.name, Tokens.FONT_MD, tokens.text),
-                new LinearLayout.LayoutParams(-1, -2));
+        labels.addView(Ui.bold(context, WorkspaceNames.label(context, project), Tokens.FONT_MD,
+                tokens.text), new LinearLayout.LayoutParams(-1, -2));
         TextView path = Ui.text(context, subtitle, Tokens.FONT_XS,
                 tokens.textTertiary, Typeface.NORMAL);
         path.setSingleLine(true);
@@ -199,17 +337,17 @@ public final class WorkspaceProjectsPage extends SettingsPage {
         pathParams.topMargin = Ui.dp(context, 2);
         labels.addView(path, pathParams);
 
-        if (project.selected) {
-            TextView selected = Ui.medium(context,
+        if (selected) {
+            TextView badge = Ui.medium(context,
                     context.getString(R.string.workspace_selected),
                     Tokens.FONT_XS, tokens.accent);
-            selected.setBackground(Ui.rounded(context, tokens.accentMuted, 999));
-            Ui.padding(selected, 8, 3, 8, 3);
-            row.addView(selected, new LinearLayout.LayoutParams(-2, -2));
+            badge.setBackground(Ui.rounded(context, tokens.accentMuted, 999));
+            Ui.padding(badge, 8, 3, 8, 3);
+            row.addView(badge, new LinearLayout.LayoutParams(-2, -2));
         }
         theme.bind(t -> row.setBackground(Ui.roundedStroke(context,
-                project.selected ? t.inputBg : t.surfaceElevated, 12,
-                project.selected ? t.accent : t.border)));
+                selected ? t.inputBg : t.surfaceElevated, 12,
+                selected ? t.accent : t.border)));
         return row;
     }
 
@@ -235,7 +373,7 @@ public final class WorkspaceProjectsPage extends SettingsPage {
         return card;
     }
 
-    /** Builds the external-access card with the open-in-files-app and share buttons. */
+    /** Builds the external-access card with the open-in-files-app button. */
     private LinearLayout externalCard() {
         Context context = getContext();
         Tokens tokens = theme.current();
@@ -262,17 +400,6 @@ public final class WorkspaceProjectsPage extends SettingsPage {
         LinearLayout.LayoutParams buttonParams = new LinearLayout.LayoutParams(-1, Ui.dp(context, 42));
         buttonParams.topMargin = Ui.dp(context, 10);
         card.addView(button, buttonParams);
-
-        LinearLayout share = new LinearLayout(context);
-        share.setGravity(Gravity.CENTER);
-        share.setClickable(true);
-        share.setBackground(Ui.roundedStroke(context, tokens.accentMuted, 10, tokens.accent));
-        share.addView(Ui.bold(context, context.getString(R.string.workspace_share),
-                Tokens.FONT_SM, tokens.accent), new LinearLayout.LayoutParams(-2, -2));
-        share.setOnClickListener(v -> listener.shareWorkspace());
-        LinearLayout.LayoutParams shareParams = new LinearLayout.LayoutParams(-1, Ui.dp(context, 42));
-        shareParams.topMargin = Ui.dp(context, 8);
-        card.addView(share, shareParams);
         theme.bind(t -> card.setBackground(Ui.rounded(context, t.surfaceElevated, 12)));
         return card;
     }

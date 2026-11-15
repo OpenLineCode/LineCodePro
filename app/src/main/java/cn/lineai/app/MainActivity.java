@@ -40,8 +40,6 @@ import cn.lineai.feature.extensions.SkillEditPage;
 import cn.lineai.feature.extensions.GitHubSkillPage;
 import cn.lineai.feature.extensions.SkillHubPage;
 import cn.lineai.feature.extensions.SkillsExtensionsPage;
-import cn.lineai.feature.models.ModelEditPage;
-import cn.lineai.feature.models.ModelListPage;
 import cn.lineai.feature.models.ModelScreens;
 import cn.lineai.feature.settings.AdvancedFeaturesPage;
 import cn.lineai.feature.settings.BehaviorSettingsPage;
@@ -118,6 +116,7 @@ public final class MainActivity extends Activity implements cn.lineai.feature.ch
         root.addView(overlay, new FrameLayout.LayoutParams(-1, -1));
         installInsets(overlay);
         setContentView(root);
+        HostActions.maybeAutoCheckUpdates(this, tokens, graph, this::openLink);
         ScreenRegistry registry = new ScreenRegistry().register(CHAT).register(cn.lineai.runtime.PageFactory.BROWSER);
         SettingsScreens.register(registry);
         ModelScreens.register(registry);
@@ -201,6 +200,10 @@ public final class MainActivity extends Activity implements cn.lineai.feature.ch
             case EXTENSIONS: navigation.push(SettingsScreens.EXTENSIONS.key(Params.Empty.INSTANCE)); break;
             case TOOLS: navigation.push(SettingsScreens.TOOL_SETTINGS.key(Params.Empty.INSTANCE)); break;
             case MODELS: navigation.push(ModelScreens.LIST.key(Params.Empty.INSTANCE)); break;
+            case STATS: navigation.push(SettingsScreens.STATS.key(Params.Empty.INSTANCE)); break;
+            case SSH: navigation.push(SettingsScreens.SSH.key(Params.Empty.INSTANCE)); break;
+            case WORKSPACE: navigation.push(WorkspaceScreens.PROJECTS.key(Params.Empty.INSTANCE)); break;
+            case TERMINAL_PROVIDERS: navigation.push(ExtensionScreens.TERMINAL_PROVIDERS.key(Params.Empty.INSTANCE)); break;
             default: unavailable();
         }
     }
@@ -283,8 +286,7 @@ public final class MainActivity extends Activity implements cn.lineai.feature.ch
     /** Opens the workspace file attachment sheet. */
     @Override public void onAttachmentPicker() {
         hideKeyboard();
-        cn.lineai.feature.chat.ChatSheets.showAttachmentTree(this,
-                chat::fileAttachmentPaths, chat::toggleFileAttachment);
+        HostActions.showAttachmentTree(this, graph, this, chat);
     }
 
     /** Launches the image attachment picker. */
@@ -343,12 +345,14 @@ public final class MainActivity extends Activity implements cn.lineai.feature.ch
 
     /** Name of the selected project; empty when none is selected. */
     @Override public String projectLabel() {
+        if (graph.terminalWorkspaceActive()) return graph.terminalWorkspaceLabel();
         cn.lineai.core.model.Project project = graph.projects().selected();
         return project == null ? "" : project.name;
     }
 
     /** Filesystem path of the selected project; empty when none is selected. */
     @Override public String projectPath() {
+        if (graph.terminalWorkspaceActive()) return graph.terminalWorkspacePath();
         cn.lineai.core.model.Project project = graph.projects().selected();
         return project == null ? "" : project.path;
     }
@@ -499,15 +503,11 @@ public final class MainActivity extends Activity implements cn.lineai.feature.ch
         HostActions.openExternalWorkspace(this, tokens, graph);
     }
 
-    /** Shares the workspace root with read and write grants. */
-    @Override public void shareWorkspace() {
-        HostActions.shareWorkspace(this);
-    }
-
     /** Stores the project label and refreshes the chat model context. */
     @Override public void applyProjectLabel(cn.lineai.core.model.Project project) {
-        graph.settings().put(cn.lineai.feature.chat.ChatController.KEY_PROJECT_LABEL,
-                project == null ? "" : project.name);
+        String label = project == null ? "" : cn.lineai.core.model.Project.DEFAULT_ID.equals(project.id)
+                ? getString(R.string.workspace_default_name) : project.name;
+        graph.settings().put(cn.lineai.feature.chat.ChatController.KEY_PROJECT_LABEL, label);
         graph.chat().refreshModel();
     }
 

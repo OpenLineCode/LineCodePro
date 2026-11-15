@@ -10,14 +10,18 @@ import cn.lineai.ui.tokens.Tokens;
 import java.util.function.Consumer;
 
 /**
- * Landing page of the settings feature, listing the available settings destinations as
- * navigation groups.
+ * Landing page of the settings feature, grouping every destination by area.
+ *
+ * <p>The home screen is the only settings page that owns navigation: each row reports its
+ * {@link Destination} to the host, which maps it to the registered screen. The tutorial row stays
+ * pinned above the groups because it is the first-run entry point.</p>
  */
 public final class SettingsHome extends SettingsPage {
     /** Destinations reachable from the settings home screen. */
     public enum Destination {
-        TUTORIAL, MODELS, BEHAVIOR, MCP, TOOLS, EXTENSIONS, ADVANCED,
-        INPUT, THEME, OUTPUT, SECURITY, STORAGE, MEMORY, DATA, LOGS, KEEP_ALIVE, ABOUT
+        TUTORIAL, MODELS, BEHAVIOR, MCP, TOOLS, EXTENSIONS, ADVANCED, SSH, TERMINAL_PROVIDERS,
+        INPUT, THEME, OUTPUT, SECURITY, STORAGE, MEMORY, DATA, LOGS, KEEP_ALIVE, ABOUT,
+        STATS, WORKSPACE
     }
 
     private final Consumer<Destination> navigate;
@@ -37,42 +41,52 @@ public final class SettingsHome extends SettingsPage {
                 R.string.settings_row_tutorial_title, R.string.settings_row_tutorial_desc), PreferenceRow.Style.ACTION);
         content.addView(tutorial, new LayoutParams(-1, -2));
         ai();
+        chat();
         tools();
-        appearance();
+        workspace();
+        data();
         group(R.string.screen_settings_section_security,
                 new Item(Destination.SECURITY, Icons.SHIELD_CHECK, R.string.screen_settings_section_security, R.string.settings_row_security_desc));
-        data();
         group(R.string.screen_settings_section_info,
                 new Item(Destination.ABOUT, Icons.CPU, R.string.settings_row_about_title, R.string.settings_row_about_desc));
     }
 
-    /** Adds the AI section with model and behavior destinations. */
+    /** Adds the model providers and AI behavior destinations. */
     private void ai() {
-        group(R.string.screen_settings_section_ai,
+        group(R.string.screen_settings_section_models,
                 new Item(Destination.MODELS, Icons.BOX, R.string.settings_row_models_title, R.string.settings_row_models_desc),
                 new Item(Destination.BEHAVIOR, Icons.BRAIN, R.string.screen_llm_title, R.string.settings_row_llm_desc));
     }
 
-    /** Adds the tools section with MCP, tool, extension, and advanced destinations. */
+    /** Adds the chat input, output and theme destinations. */
+    private void chat() {
+        group(R.string.screen_settings_section_chat,
+                new Item(Destination.INPUT, Icons.MESSAGE_SQUARE_TEXT, R.string.screen_input_title, R.string.settings_row_input_desc),
+                new Item(Destination.OUTPUT, Icons.MONITOR, R.string.settings_row_output_title, R.string.settings_row_output_desc),
+                new Item(Destination.THEME, Icons.PALETTE, R.string.settings_row_theme_title, R.string.settings_row_theme_desc));
+    }
+
+    /** Adds the tool, MCP, extension, SSH, terminal provider and advanced destinations. */
     private void tools() {
         group(R.string.screen_settings_section_tools,
-                new Item(Destination.MCP, Icons.MCP, R.string.settings_row_mcp_title, R.string.settings_row_mcp_desc),
                 new Item(Destination.TOOLS, Icons.SLIDERS_HORIZONTAL, R.string.settings_row_tool_settings_title, R.string.settings_row_tool_settings_desc),
+                new Item(Destination.MCP, Icons.MCP, R.string.settings_row_mcp_title, R.string.settings_row_mcp_desc),
                 new Item(Destination.EXTENSIONS, Icons.PACKAGE, R.string.settings_row_extensions_title, R.string.settings_row_extensions_desc),
+                new Item(Destination.SSH, Icons.SERVER, R.string.settings_row_ssh_title, R.string.settings_row_ssh_desc),
+                new Item(Destination.TERMINAL_PROVIDERS, Icons.TERMINAL, R.string.settings_row_terminal_providers_title, R.string.settings_row_terminal_providers_desc),
                 new Item(Destination.ADVANCED, Icons.ZAP, R.string.settings_row_advanced_title, R.string.settings_row_advanced_desc));
     }
 
-    /** Adds the appearance section with input, theme, and output destinations. */
-    private void appearance() {
-        group(R.string.screen_settings_section_ui,
-                new Item(Destination.INPUT, Icons.MESSAGE_SQUARE_TEXT, R.string.screen_input_title, R.string.settings_row_input_desc),
-                new Item(Destination.THEME, Icons.PALETTE, R.string.settings_row_theme_title, R.string.settings_row_theme_desc),
-                new Item(Destination.OUTPUT, Icons.MONITOR, R.string.settings_row_output_title, R.string.settings_row_output_desc));
+    /** Adds the workspace destination. */
+    private void workspace() {
+        group(R.string.screen_settings_section_workspace,
+                new Item(Destination.WORKSPACE, Icons.FOLDER, R.string.settings_row_workspace_title, R.string.settings_row_workspace_desc));
     }
 
-    /** Adds the data section with storage, memory, data, logs, and keep-alive destinations. */
+    /** Adds the statistics, storage, memory, data, log and keep-alive destinations. */
     private void data() {
         group(R.string.screen_settings_section_data,
+                new Item(Destination.STATS, Icons.SQUARE_FUNCTION, R.string.settings_row_stats_title, R.string.settings_row_stats_desc),
                 new Item(Destination.STORAGE, Icons.DATABASE, R.string.settings_row_storage_title, R.string.settings_row_storage_desc),
                 new Item(Destination.MEMORY, Icons.BOOK_OPEN, R.string.settings_row_memory_title, R.string.settings_row_memory_desc),
                 new Item(Destination.DATA, Icons.ARCHIVE, R.string.settings_row_data_title, R.string.settings_row_data_desc),
