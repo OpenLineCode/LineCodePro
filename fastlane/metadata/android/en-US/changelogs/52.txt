@@ -1,0 +1,1 @@
+Provider-based model management with automatic capability detection, per-model reasoning levels, per-turn token and timing stats, a statistics page, restart-safe error rows, richer failure diagnostics and a manual update check in About.

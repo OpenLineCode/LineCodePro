@@ -1,0 +1,30 @@
+LineCode Pro is an AI coding workspace for Android that packs a full toolchain into roughly one megabyte.
+
+The small footprint is deliberate: the app is hand-written Java with a hand-drawn interface, so there is no Kotlin runtime, no AndroidX, no Compose, no ads, no trackers and no Google Play services standing between you and your project.
+
+CHAT WITH ANY MODEL
+- Streaming conversations with any OpenAI-compatible Chat Completions or Responses endpoint, Anthropic Messages, or a Codex-style gateway.
+- Per-model reasoning levels, automatic context-window detection and per-turn token and timing statistics.
+- Long-term memory, soft and hard context compaction, and durable project memory for long sessions.
+
+TOOLS, NOT JUST A TEXT BOX
+- Read, create, edit, search and organize files in a workspace you choose.
+- Run shell commands locally, over SSH, in Termux, or through a compatible Android terminal provider.
+- Web search, image understanding and generation, and HTTP MCP servers.
+- Delegate work to Agents, install SKILL.md skills and discover community skills through SkillHub.
+- Review every change in a diff and roll it back; approval modes: auto, confirm and read-only.
+
+A REAL WORKSPACE
+- App-managed projects, SSH hosts, Termux and terminal-provider homes.
+- Session modes for chat, planning, agent work and device control (the last one is opt-in through the accessibility service).
+- Light, dark, system, paper, high-contrast and custom palettes, with hand-written Markdown and code rendering.
+
+PRIVATE BY DEFAULT
+- Conversations, settings, memories and diff history stay in a local SQLite database.
+- Credentials and project content are only sent to the endpoints you configure, including self-hosted servers.
+- No analytics, no crash reporting, no account and no ads.
+- Update checks are opt-in: the app does not contact GitHub until you ask it to check once; after that it may look for new releases, and reminders can be muted.
+
+The F-Droid build is the slim variant: it bundles no native libraries and no local GGUF model support, so bring an API key or a self-hosted endpoint. Everything else is here: chat, tools, agents, MCP, skills, SSH, projects, themes and local history, in an APK of about 1 MB.
+
+Requires Android 8.0 (API 26) or newer. Source code and issue tracker: https://github.com/OpenLineCode/LineCodePro

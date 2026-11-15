@@ -1,0 +1,1 @@
+First F-Droid build. Update checks are now opt-in: nothing is fetched until you run a manual check once, after which new releases are announced automatically. This release is reproducible and project-signed: F-Droid verifies the slim build against the signed GitHub release, so updates keep the same signature. The local-model variant remains a GitHub-only release.
