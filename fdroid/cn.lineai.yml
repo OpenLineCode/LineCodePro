@@ -18,15 +18,15 @@ Repo: https://github.com/OpenLineCode/LineCodePro.git
 # Reproducible build: F-Droid rebuilds the tagged source and only publishes the
 # project-signed APK when its rebuild matches this reference binary byte for byte
 # (except the signature). With these two fields only the upstream-signed APK is
-# published; no APK signed by F-Droid's key is shipped. The asset name contains
-# spaces, hence the URL-encoded %20.
-Binaries: https://github.com/OpenLineCode/LineCodePro/releases/download/v%v/LineCode%20Pro%20%v-slim.APK
+# published; no APK signed by F-Droid's key is shipped. GitHub replaces spaces in
+# uploaded asset names with dots, hence LineCode.Pro.<version>-slim.APK.
+Binaries: https://github.com/OpenLineCode/LineCodePro/releases/download/v%v/LineCode.Pro.%v-slim.APK
 AllowedAPKSigningKeys: 1c2c0c3db2c39b31355168ec30a7026f7c6b3931f25fd650745dd88112a64fac
 
 Builds:
   - versionName: 2.2.1
     versionCode: 53
-    commit: <FULL_40_CHAR_SHA_OF_v2.2.1>
+    commit: c61bf4a352dfc1ff9fde31ae8cf32f713f406f36
     gradle:
       - yes
     gradleprops:
@@ -59,6 +59,10 @@ MaintainerNotes: |-
   runner and the F-Droid build server. Version info lives in
   app/build.gradle.kts (releaseVersionName variable and versionCode), hence
   UpdateCheckData.
+
+  Verified 2026-11-16: a local rebuild from v2.2.1 with -PlinecodeFdroid=true,
+  with the released APK's signature copied over, reproduced the published
+  LineCode.Pro.2.2.1-slim.APK byte for byte.
 
   No ads, analytics, crash reporting or Google Play services. Update checks are
   opt-in: the app makes no update request until the user manually checks once
