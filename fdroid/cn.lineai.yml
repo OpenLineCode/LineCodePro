@@ -1,6 +1,6 @@
 # Copy this file to fdroiddata: metadata/cn.lineai.yml
 # Reproducible-build setup for the slim (no local-model) F-Droid build only.
-# Replace <FULL_40_CHAR_SHA_OF_v2.2.1> with the full commit hash of the release tag
+# Replace <FULL_40_CHAR_SHA_OF_v2.2.2> with the full commit hash of the release tag
 # that contains the fastlane/ metadata, the reproducible packaging changes and the
 # linecodeFdroid build switch.
 
@@ -24,9 +24,9 @@ Binaries: https://github.com/OpenLineCode/LineCodePro/releases/download/v%v/Line
 AllowedAPKSigningKeys: 1c2c0c3db2c39b31355168ec30a7026f7c6b3931f25fd650745dd88112a64fac
 
 Builds:
-  - versionName: 2.2.1
-    versionCode: 53
-    commit: c61bf4a352dfc1ff9fde31ae8cf32f713f406f36
+  - versionName: 2.2.2
+    versionCode: 54
+    commit: <FULL_40_CHAR_SHA_OF_v2.2.2>
     gradle:
       - yes
     gradleprops:
@@ -73,5 +73,5 @@ MaintainerNotes: |-
 AutoUpdateMode: Version
 UpdateCheckMode: Tags ^v[0-9]+\.[0-9]+\.[0-9]+$
 UpdateCheckData: 'app/build.gradle.kts|versionCode = (\d+)|app/build.gradle.kts|releaseVersionName = "([^"]+)"'
-CurrentVersion: 2.2.1
-CurrentVersionCode: 53
+CurrentVersion: 2.2.2
+CurrentVersionCode: 54

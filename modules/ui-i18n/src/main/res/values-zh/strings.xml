@@ -509,7 +509,7 @@
     <string name="screen_mcp_query_pending">查询后会在这里显示 tools 列表，可单独开启或关闭。</string>
     <string name="screen_mcp_query_busy_desc">正在查询服务暴露的 tools。</string>
     <string name="screen_mcp_query_done_toast">已查询到 %1$d 个 tools</string>
-    <string name="screen_mcp_url_invalid">MCP 地址必须以 http:// 或 https:// 开头</string>
+    <string name="screen_mcp_url_invalid">MCP 地址需使用 https://（http:// 仅支持本机或局域网地址）</string>
     <string name="screen_mcp_save_require_name_url">请填写名称和有效 MCP 地址</string>
     <string name="screen_mcp_save_require_query">请先点击「查询 MCP 列表」获取 tools 后再保存</string>
     <string name="screen_mcp_header_value_hint">值</string>

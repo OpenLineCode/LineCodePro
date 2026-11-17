@@ -473,7 +473,7 @@
     <string name="screen_mcp_query_pending">After querying, the tools list will appear here. You can enable or disable each one.</string>
     <string name="screen_mcp_query_busy_desc">Querying the tools exposed by the service.</string>
     <string name="screen_mcp_query_done_toast">Queried %1$d tools</string>
-    <string name="screen_mcp_url_invalid">MCP URL must start with http:// or https://</string>
+    <string name="screen_mcp_url_invalid">MCP URL must use https:// (http:// only for local or LAN addresses)</string>
     <string name="screen_mcp_save_require_name_url">Please enter a name and a valid MCP URL</string>
     <string name="screen_mcp_save_require_query">Please click "Query MCP list" to fetch tools before saving</string>
     <string name="screen_mcp_header_value_hint">Value</string>

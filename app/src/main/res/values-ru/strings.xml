@@ -455,7 +455,7 @@
     <string name="screen_mcp_query_pending">После запроса здесь появится список инструментов. Можно включить или отключить каждый.</string>
     <string name="screen_mcp_query_busy_desc">Запрос инструментов, предоставляемых сервисом.</string>
     <string name="screen_mcp_query_done_toast">Запрошено %1$d инструментов</string>
-    <string name="screen_mcp_url_invalid">MCP URL должен начинаться с http:// или https://</string>
+    <string name="screen_mcp_url_invalid">MCP URL должен использовать https:// (http:// только для локальных или LAN-адресов)</string>
     <string name="screen_mcp_save_require_name_url">Введите имя и корректный MCP URL</string>
     <string name="screen_mcp_save_require_query">Нажмите «Запросить MCP список» для получения инструментов перед сохранением</string>
     <string name="screen_mcp_header_value_hint">Значение</string>

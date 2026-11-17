@@ -1,0 +1,1 @@
+MCP extensions now accept plain http:// endpoints on localhost, private/LAN and link-local addresses, so an MCP server running in Termux or on a dev machine on the same Wi-Fi can be added; public hosts still require https://. The URL validation message is clearer.
