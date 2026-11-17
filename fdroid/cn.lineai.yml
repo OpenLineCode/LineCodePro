@@ -26,7 +26,7 @@ AllowedAPKSigningKeys: 1c2c0c3db2c39b31355168ec30a7026f7c6b3931f25fd650745dd8811
 Builds:
   - versionName: 2.2.2
     versionCode: 54
-    commit: <FULL_40_CHAR_SHA_OF_v2.2.2>
+    commit: d65c16f0d0d0bbc89189c60be5eab19a8ad2c006
     gradle:
       - yes
     gradleprops:
@@ -60,9 +60,9 @@ MaintainerNotes: |-
   app/build.gradle.kts (releaseVersionName variable and versionCode), hence
   UpdateCheckData.
 
-  Verified 2026-11-16: a local rebuild from v2.2.1 with -PlinecodeFdroid=true,
+  Verified 2026-11-17: a local rebuild from v2.2.2 with -PlinecodeFdroid=true,
   with the released APK's signature copied over, reproduced the published
-  LineCode.Pro.2.2.1-slim.APK byte for byte.
+  LineCode.Pro.2.2.2-slim.APK byte for byte.
 
   No ads, analytics, crash reporting or Google Play services. Update checks are
   opt-in: the app makes no update request until the user manually checks once
