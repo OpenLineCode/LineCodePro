@@ -1,0 +1,1 @@
+MCP 扩展现在支持 localhost、私有/局域网与链路本地地址使用 http://，同一 Wi-Fi 下的 Termux 或开发机 MCP 服务可以直接添加；公网地址仍需 https://。地址校验提示也更准确。

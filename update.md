@@ -1,5 +1,29 @@
 # Changelog / 更新日志
 
+## v2.2.2
+
+### English
+
+#### MCP connection fixes
+
+- **LAN MCP servers over HTTP** - MCP extension URLs now accept plain `http://` endpoints on loopback, emulator, private/LAN and link-local addresses (`10/8`, `172.16/12`, `192.168/16`, `169.254/16`, `127/8`, IPv6 ULA and link-local, `localhost` and `*.local`), so a local MCP server such as Termux or a dev machine on the same Wi-Fi can be added. Public hosts still require `https://`.
+- **Clearer URL validation message** - the error now says that `https://` is required and `http://` is only for local or LAN addresses, instead of the misleading "must start with http:// or https://".
+
+#### Release
+
+- Version `2.2.2` (versionCode 54).
+
+### 中文
+
+#### MCP 连接修复
+
+- **局域网 MCP 服务支持 HTTP** - MCP 扩展地址现在允许回环、模拟器、私有/局域网与链路本地地址使用 `http://`（`10/8`、`172.16/12`、`192.168/16`、`169.254/16`、`127/8`、IPv6 ULA 与链路本地、`localhost`、`*.local`），同一 Wi-Fi 下的 Termux 或开发机 MCP 服务可以直接添加；公网地址仍必须使用 `https://`。
+- **地址校验提示更准确** - 失败时提示"需使用 https://（http:// 仅支持本机或局域网地址）"，不再误导为"必须以 http(s) 开头"。
+
+#### 发布
+
+- 版本 `2.2.2`（versionCode 54）。
+
 ## v2.2.1
 
 ### English
