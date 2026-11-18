@@ -2,14 +2,19 @@ package cn.lineai.data.api;
 
 import java.util.List;
 
+import cn.lineai.core.kernel.error.FailureReporter;
+
 /**
  * Append-only failure log with a bounded size.
  *
  * <p>Entries are captured as display text rather than structured exceptions; the log exists so the
  * error-log screen can show what failed and why. Implementations retain at most
  * {@link #MAX_ENTRIES} entries and drop the oldest ones beyond that bound.</p>
+ *
+ * <p>The store is also the application-wide {@link FailureReporter}, so features, engines and
+ * tools record into the same log the screen reads.</p>
  */
-public interface ErrorLogStore {
+public interface ErrorLogStore extends FailureReporter {
 
     /** Maximum number of entries retained before the oldest ones are discarded. */
     int MAX_ENTRIES = 200;
@@ -28,6 +33,7 @@ public interface ErrorLogStore {
      * @param subtitle optional secondary line shown beneath the title
      * @param detail full technical description shown when the entry is expanded
      */
+    @Override
     void record(String title, String subtitle, String detail);
 
     /** Deletes every recorded entry. */

@@ -14,8 +14,11 @@ import android.widget.TextView;
 import android.widget.Toast;
 
 import java.util.ArrayList;
+import java.util.Collections;
 import java.util.List;
+import java.util.Locale;
 
+import cn.lineai.core.kernel.error.FailureReporter;
 import cn.lineai.core.kernel.time.Scheduler;
 import cn.lineai.core.model.McpExtension;
 import cn.lineai.core.model.HttpHeader;
@@ -59,9 +62,12 @@ public final class McpExtensionEditPage extends ExtensionPage {
     private final LinearLayout toolsHost;
     private final List<String> headerNames = new ArrayList<>();
     private final List<String> headerValues = new ArrayList<>();
+    private final McpClient client;
     private List<McpToolInfo> tools = new ArrayList<>();
     private boolean queried;
     private boolean querying;
+    private String queriedEndpoint;
+    private String queriedHeaders;
 
     /**
      * Builds the editor, seeding the form from the extension being edited when present.
@@ -71,13 +77,16 @@ public final class McpExtensionEditPage extends ExtensionPage {
      * @param back action invoked when the user navigates back
      * @param editing extension to edit, or null to create a new one
      * @param scheduler scheduler enforcing the I/O-to-main threading contract
+     * @param failures sink receiving discovery failures so a failed scan stays diagnosable
      * @param listener persistence callbacks
      */
     public McpExtensionEditPage(Context context, Tokens tokens, Runnable back,
-                                McpExtension editing, Scheduler scheduler, Listener listener) {
+                                McpExtension editing, Scheduler scheduler,
+                                FailureReporter failures, Listener listener) {
         super(context, tokens, back, R.string.screen_mcp_add_title);
         this.listener = listener;
         this.scheduler = scheduler;
+        this.client = new McpClient(failures);
         this.editing = editing == null ? McpExtension.builder().build() : editing;
         for (HttpHeader header : this.editing.headers) {
             headerNames.add(header.name);
@@ -85,6 +94,8 @@ public final class McpExtensionEditPage extends ExtensionPage {
         }
         this.tools = new ArrayList<>(this.editing.tools);
         this.queried = !this.editing.id.isEmpty();
+        this.queriedEndpoint = this.editing.url;
+        this.queriedHeaders = signature(this.editing.headers);
         header(R.string.screen_mcp_add_title, ExtensionKit.saveAction(context, theme, this::save));
 
         name = ExtensionKit.field(context, theme, R.string.screen_mcp_field_name,
@@ -317,8 +328,8 @@ public final class McpExtensionEditPage extends ExtensionPage {
         final List<HttpHeader> snapshot = headers();
         scheduler.io(() -> {
             try {
-                List<McpToolInfo> found = new McpClient().listTools(endpoint, snapshot);
-                scheduler.main(() -> applyQuery(found));
+                List<McpToolInfo> found = client.listTools(endpoint, snapshot);
+                scheduler.main(() -> applyQuery(found, endpoint, signature(snapshot)));
             } catch (Exception error) {
                 String message = error.getMessage() == null
                         ? error.getClass().getSimpleName() : error.getMessage();
@@ -328,9 +339,11 @@ public final class McpExtensionEditPage extends ExtensionPage {
     }
 
     /** Merges discovered tools, preserving prior enablement by tool name. */
-    private void applyQuery(List<McpToolInfo> found) {
+    private void applyQuery(List<McpToolInfo> found, String endpoint, String headerSignature) {
         querying = false;
         queried = true;
+        queriedEndpoint = endpoint;
+        queriedHeaders = headerSignature;
         List<McpToolInfo> merged = new ArrayList<>();
         for (McpToolInfo tool : found) {
             boolean enabled = true;
@@ -396,12 +409,39 @@ public final class McpExtensionEditPage extends ExtensionPage {
             Toast.makeText(getContext(), R.string.screen_mcp_url_invalid, Toast.LENGTH_SHORT).show();
             return;
         }
+        List<HttpHeader> current = headers();
+        if (!endpoint.equals(queriedEndpoint) || !signature(current).equals(queriedHeaders)) {
+            Toast.makeText(getContext(), R.string.screen_mcp_save_require_query,
+                    Toast.LENGTH_SHORT).show();
+            return;
+        }
         McpExtension saved = editing.toBuilder()
                 .name(name.value())
                 .url(endpoint)
-                .headers(headers())
+                .headers(current)
                 .tools(new ArrayList<>(tools))
                 .build();
         listener.onSave(saved);
+    }
+
+    /**
+     * Builds a stable fingerprint of a header set.
+     *
+     * <p>Discovery results are only valid for the endpoint and credentials they were read with,
+     * so the editor compares this fingerprint before saving tools under a different connection.</p>
+     *
+     * @param headers headers in configuration order
+     * @return sorted, case-normalised {@code name:value} lines
+     */
+    private static String signature(List<HttpHeader> headers) {
+        List<String> parts = new ArrayList<>();
+        for (HttpHeader header : headers) {
+            if (header.name.isEmpty()) {
+                continue;
+            }
+            parts.add(header.name.toLowerCase(Locale.ROOT) + ':' + header.value);
+        }
+        Collections.sort(parts);
+        return String.join("\n", parts);
     }
 }

@@ -37,6 +37,13 @@ public class McpClientTest {
         assertEquals("one\ntwo", text);
     }
 
+    @Test public void toolResultTextFlagsFailedToolResults() {
+        String text = McpClient.toolResultText(
+                "{\"result\":{\"content\":[{\"type\":\"text\",\"text\":\"denied\"}],"
+                        + "\"isError\":true}}");
+        assertTrue(text.startsWith("MCP error: denied"));
+    }
+
     @Test public void normalizesUrlsAndRejectsRemoteCleartext() {
         assertEquals("https://example.com/mcp",
                 McpClient.normalizeUrl("https://example.com/mcp/"));

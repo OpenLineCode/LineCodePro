@@ -1,5 +1,49 @@
 # Changelog / 更新日志
 
+## v2.2.3
+
+### English
+
+#### MCP protocol compliance
+
+- **Session initialization** - the client now runs the MCP `initialize` handshake and sends `notifications/initialized` before its first request, keeps the `Mcp-Session-Id` issued by the server and replays it together with `MCP-Protocol-Version` on every later request. Servers that refuse session-less requests - most Streamable HTTP implementations - connect and list their tools instead of answering HTTP 400.
+- **Protocol version negotiation** - the newest revision is offered first and older revisions are retried when a server refuses it, so current and older deployments both work.
+- **Session recovery** - an expired or restarted session (HTTP 404) is re-initialized once and the request retried instead of failing outright.
+- **Complete tool discovery** - `tools/list` follows `nextCursor`, so servers that page their catalogue return every tool.
+- **Streaming replies** - event-stream responses are read until the matching response arrives, skipping progress notifications, instead of waiting for the connection to close or parsing the last `data:` line.
+- **Tool failures** - results flagged with `isError` are reported as failures instead of successful output.
+- **Re-scan after edits** - saving an MCP server requires discovery against the current address and headers, so a changed URL or credential never keeps a stale tool list.
+- **Stateless servers** - when a server answers no `initialize` handshake, the client switches to the stateless protocol revision (`2026-07-28`): every request carries the protocol version, client identity and capability metadata plus the routing headers, so stateless deployments list tools and run calls like session-based ones.
+
+#### Failure log
+
+- **No silent failures** - failures that only flashed by as a toast now also reach the in-app error log: MCP connection, discovery and tool-call failures (endpoints are logged without query-string secrets), AI agent drafting (a failed call or an unusable answer), sub-agent session load/save and turn failures, skill downloads and imports, and archive export/import. Sub-agent turns were not logged at all before: their controllers had no failure log attached, and their entries are now labelled with the agent name.
+
+#### Release
+
+- Version `2.2.3` (versionCode 55).
+
+### 中文
+
+#### MCP 协议合规
+
+- **会话初始化** - 客户端先执行 MCP `initialize` 握手并发送 `notifications/initialized`，之后才发起首个请求；保存服务端下发的 `Mcp-Session-Id`，并在后续请求中与 `MCP-Protocol-Version` 一并回传。此前缺少握手，多数 Streamable HTTP 服务端直接返回 HTTP 400，表现为无法连接、扫描不到工具，现已修复。
+- **协议版本协商** - 优先使用最新协议版本，被服务端拒绝时自动降级重试，新旧部署均可连接。
+- **会话恢复** - 会话过期或服务端重启（HTTP 404）时自动重新初始化并重试一次，不再直接报错。
+- **完整工具发现** - `tools/list` 会跟随 `nextCursor` 翻页，分页返回的服务端也能取到全部工具。
+- **流式响应** - 事件流响应读取到对应结果即返回，跳过进度通知，不再等待连接关闭或只解析最后一行 `data:`。
+- **工具错误** - 结果中标记 `isError` 的调用按失败上报，不再当作成功输出。
+- **改动后重新扫描** - 保存 MCP 服务时必须针对当前地址与请求头重新扫描，地址或凭据变化后不会保留过期的工具列表。
+- **无状态服务** - 服务端不响应 `initialize` 握手时，客户端自动切换到无状态协议（`2026-07-28`）：每个请求都携带协议版本、客户端标识与能力元数据，并带上路由头，无状态部署同样能列出工具、执行调用。
+
+#### 错误日志
+
+- **失败不再丢失** - 以前只在 Toast 里一闪而过的失败，现在同时写入应用内错误日志：MCP 连接、扫描与工具调用失败（地址中的 query 密钥会被去掉）、AI 生成 Agent 草稿失败（调用异常或结果不可用）、子 Agent 会话读写与回合失败、技能下载与安装失败、归档导出与导入失败。子 Agent 的回合失败此前完全没有记录（其控制器未接入错误日志），现在按 Agent 名称单独标注。
+
+#### 发布
+
+- 版本 `2.2.3`（versionCode 55）。
+
 ## v2.2.2
 
 ### English

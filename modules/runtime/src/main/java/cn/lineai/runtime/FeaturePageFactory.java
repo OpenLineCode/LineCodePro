@@ -6,13 +6,9 @@ import android.widget.Toast;
 
 import cn.lineai.core.mvi.nav.Params;
 import cn.lineai.core.mvi.nav.ScreenKey;
-import cn.lineai.feature.extensions.AgentExtensionEditPage;
-import cn.lineai.feature.extensions.AgentExtensionsPage;
 import cn.lineai.feature.extensions.ExtensionScreens;
 import cn.lineai.feature.extensions.GitHubSkillPage;
 import cn.lineai.feature.extensions.LineCodeExtensionsPage;
-import cn.lineai.feature.extensions.McpExtensionEditPage;
-import cn.lineai.feature.extensions.McpExtensionsPage;
 import cn.lineai.feature.extensions.SkillEditPage;
 import cn.lineai.feature.extensions.SkillHubPage;
 import cn.lineai.feature.extensions.SkillsExtensionsPage;
@@ -32,6 +28,7 @@ public final class FeaturePageFactory {
 
     private final PageHost host;
     private final LocalModelBridge localModels;
+    private final ExtensionPages extensionPages;
     private SkillsExtensionsPage skillsPage;
     private WorkspaceProjectsPage workspacePage;
     private LocalModelBridge.Page localPage;
@@ -40,14 +37,19 @@ public final class FeaturePageFactory {
     FeaturePageFactory(PageHost host) {
         this.host = host;
         this.localModels = LocalModelBridges.find();
+        this.extensionPages = new ExtensionPages(host);
     }
 
     /** Builds the view for one feature screen key; throws on unregistered routes. */
     View create(ScreenKey<?, ?> key) {
-        if (key.id() == ExtensionScreens.AGENTS) return agentExtensionsPage();
-        if (key.id() == ExtensionScreens.AGENT_EDIT) return agentEditPage((Params.Args) key.params());
-        if (key.id() == ExtensionScreens.MCPS) return mcpExtensionsPage();
-        if (key.id() == ExtensionScreens.MCP_EDIT) return mcpEditPage((Params.Args) key.params());
+        if (key.id() == ExtensionScreens.AGENTS) return extensionPages.agentExtensionsPage();
+        if (key.id() == ExtensionScreens.AGENT_EDIT) {
+            return extensionPages.agentEditPage((Params.Args) key.params());
+        }
+        if (key.id() == ExtensionScreens.MCPS) return extensionPages.mcpExtensionsPage();
+        if (key.id() == ExtensionScreens.MCP_EDIT) {
+            return extensionPages.mcpEditPage((Params.Args) key.params());
+        }
         if (key.id() == ExtensionScreens.SKILLS) return skillsExtensionsPage();
         if (key.id() == ExtensionScreens.SKILL_EDIT) return skillEditPage((Params.Args) key.params());
         if (key.id() == ExtensionScreens.SKILL_HUB) {
@@ -67,8 +69,8 @@ public final class FeaturePageFactory {
                     ? (String) key.args().get("slug") : "";
             return new cn.lineai.feature.extensions.SkillHubDetailPage(host.activity(),
                     host.tokens(), host.navigation()::back,
-                    host.graph().graph().get(cn.lineai.core.kernel.time.Scheduler.class),
-                    host.graph().skills(), slug);
+                    host.graph().scheduler(),
+                    host.graph().skills(), host.graph().errorLogs(), slug);
         }
         if (key.id() == ExtensionScreens.SKILL_LOGIN) {
             return new cn.lineai.feature.extensions.SkillHubLoginPage(host.activity(),
@@ -89,8 +91,7 @@ public final class FeaturePageFactory {
         }
         if (key.id() == ExtensionScreens.SKILL_GITHUB) {
             return new GitHubSkillPage(host.activity(), host.tokens(), host.navigation()::back,
-                    host.graph().graph().get(cn.lineai.core.kernel.time.Scheduler.class),
-                    host.graph().skills());
+                    host.graph().scheduler(), host.graph().skills(), host.graph().errorLogs());
         }
         if (key.id() == ExtensionScreens.LINECODE) {
             return new LineCodeExtensionsPage(host.activity(), host.tokens(),
@@ -158,121 +159,6 @@ public final class FeaturePageFactory {
     /** Refreshes the cached skills page after a SAF skill import. */
     public void reloadSkills() {
         if (skillsPage != null) skillsPage.reload();
-    }
-
-    /** Extension agent list page wired to the agent extension store. */
-    private AgentExtensionsPage agentExtensionsPage() {
-        return new AgentExtensionsPage(host.activity(), host.tokens(), host.navigation()::back,
-                new AgentExtensionsPage.Listener() {
-                    public java.util.List<cn.lineai.core.model.AgentExtension> load() {
-                        return host.graph().agentExtensions().list();
-                    }
-                    public void setEnabled(String id, boolean enabled) {
-                        host.graph().agentExtensions().setEnabled(id, enabled);
-                    }
-                    public void delete(String id) { host.graph().agentExtensions().delete(id); }
-                    public void add() {
-                        host.navigation().push(ExtensionScreens.AGENT_EDIT.key(
-                                ExtensionScreens.agentArgs("")));
-                    }
-                    public void edit(cn.lineai.core.model.AgentExtension agent) {
-                        host.navigation().push(ExtensionScreens.AGENT_EDIT.key(
-                                ExtensionScreens.agentArgs(agent.id)));
-                    }
-                });
-    }
-
-    /** Agent editor page; loads the edited agent and the phone-tool-free catalog. */
-    private AgentExtensionEditPage agentEditPage(Params.Args args) {
-        String id = args.get("id") instanceof String ? (String) args.get("id") : "";
-        cn.lineai.core.model.AgentExtension editing = null;
-        if (!id.isEmpty()) {
-            for (cn.lineai.core.model.AgentExtension agent
-                    : host.graph().agentExtensions().list()) {
-                if (agent.id.equals(id)) { editing = agent; break; }
-            }
-        }
-        final cn.lineai.core.model.AgentExtension target = editing;
-        java.util.List<cn.lineai.tool.api.Tool> agentTools = new java.util.ArrayList<>();
-        for (cn.lineai.tool.api.Tool tool : host.graph().tools().registry().all()) {
-            if (tool.kind() != cn.lineai.tool.api.ToolKind.PHONE) {
-                agentTools.add(tool);
-            }
-        }
-        return new AgentExtensionEditPage(host.activity(), host.tokens(), host.navigation()::back,
-                host.graph().scheduler(), target, agentTools,
-                new AgentExtensionEditPage.Listener() {
-                    public void onSave(cn.lineai.core.model.AgentExtension extension) {
-                        host.graph().agentExtensions().save(extension);
-                        host.navigation().back();
-                    }
-                    public void onDelete(String agentId) {
-                        host.graph().agentExtensions().delete(agentId);
-                        host.navigation().back();
-                    }
-                    public cn.lineai.core.model.AgentExtension generateDraft(String description)
-                            throws Exception {
-                        return agentDraft(description);
-                    }
-                });
-    }
-
-    /** Wires the selected model, the tool catalog and the prompt template into the use case. */
-    private cn.lineai.core.model.AgentExtension agentDraft(String description) throws Exception {
-        cn.lineai.core.model.ModelConfig model = host.graph().models().selected();
-        if (model == null) {
-            throw new IllegalStateException("No model selected");
-        }
-        return AgentDrafts.generate(model,
-                host.graph().prompts().current(cn.lineai.engine.prompt.PromptId.AGENT_DRAFT),
-                host.graph().tools().registry().all(), description,
-                new cn.lineai.engine.ai.ModelProbe());
-    }
-
-    /** MCP server list page wired to the MCP extension store. */
-    private McpExtensionsPage mcpExtensionsPage() {
-        return new McpExtensionsPage(host.activity(), host.tokens(), host.navigation()::back,
-                new McpExtensionsPage.Listener() {
-                    public java.util.List<cn.lineai.core.model.McpExtension> load() {
-                        return host.graph().mcpExtensions().list();
-                    }
-                    public void setEnabled(String id, boolean enabled) {
-                        host.graph().mcpExtensions().setEnabled(id, enabled);
-                    }
-                    public void delete(String id) { host.graph().mcpExtensions().delete(id); }
-                    public void add() {
-                        host.navigation().push(ExtensionScreens.MCP_EDIT.key(
-                                ExtensionScreens.mcpArgs("")));
-                    }
-                    public void edit(cn.lineai.core.model.McpExtension server) {
-                        host.navigation().push(ExtensionScreens.MCP_EDIT.key(
-                                ExtensionScreens.mcpArgs(server.id)));
-                    }
-                });
-    }
-
-    /** MCP server editor page; loads the edited server when the args carry an id. */
-    private McpExtensionEditPage mcpEditPage(Params.Args args) {
-        String id = args.get("id") instanceof String ? (String) args.get("id") : "";
-        cn.lineai.core.model.McpExtension editing = null;
-        if (!id.isEmpty()) {
-            for (cn.lineai.core.model.McpExtension server
-                    : host.graph().mcpExtensions().list()) {
-                if (server.id.equals(id)) { editing = server; break; }
-            }
-        }
-        return new McpExtensionEditPage(host.activity(), host.tokens(), host.navigation()::back,
-                editing, host.graph().graph().get(cn.lineai.core.kernel.time.Scheduler.class),
-                new McpExtensionEditPage.Listener() {
-                    public void onSave(cn.lineai.core.model.McpExtension extension) {
-                        host.graph().mcpExtensions().save(extension);
-                        host.navigation().back();
-                    }
-                    public void onDelete(String serverId) {
-                        host.graph().mcpExtensions().delete(serverId);
-                        host.navigation().back();
-                    }
-                });
     }
 
     /** Skills list page; cached so SAF imports can trigger a reload. */

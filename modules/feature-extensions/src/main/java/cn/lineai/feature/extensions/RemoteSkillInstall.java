@@ -2,6 +2,8 @@ package cn.lineai.feature.extensions;
 
 import java.io.ByteArrayInputStream;
 
+import cn.lineai.core.kernel.error.FailureReporter;
+import cn.lineai.core.kernel.error.FailureText;
 import cn.lineai.core.kernel.time.Scheduler;
 import cn.lineai.data.api.SkillStore;
 
@@ -47,20 +49,22 @@ final class RemoteSkillInstall {
      *
      * @param scheduler scheduler enforcing the I/O-to-main threading contract
      * @param store skill store performing the actual import
+     * @param failures sink receiving the failure so a rejected archive stays diagnosable
      * @param download archive source
      * @param displayName display name assigned to the imported skill
      * @param callback completion notification
      */
-    static void run(Scheduler scheduler, SkillStore store, Download download,
-                    String displayName, Callback callback) {
+    static void run(Scheduler scheduler, SkillStore store, FailureReporter failures,
+                    Download download, String displayName, Callback callback) {
         scheduler.io(() -> {
             try {
                 byte[] bytes = download.fetch();
                 store.importSkill(new ByteArrayInputStream(bytes), displayName);
                 scheduler.main(callback::onSuccess);
             } catch (Exception error) {
-                String message = error.getMessage() == null
-                        ? error.getClass().getSimpleName() : error.getMessage();
+                String message = FailureText.message(error);
+                failures.record("Skill install", displayName + ": " + message,
+                        FailureText.stack(error));
                 scheduler.main(() -> callback.onError(message));
             }
         });

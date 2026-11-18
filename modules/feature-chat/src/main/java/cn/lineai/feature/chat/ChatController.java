@@ -96,9 +96,7 @@ public final class ChatController {
     volatile int generationSeq;
     volatile boolean starting;
     boolean started;
-    ErrorLogStore errorLogs;
-    /** Device and version summary filled by the app shell for failure diagnostics. */
-    String deviceSummary = "";
+    ChatFailureLog failureLog = new ChatFailureLog();
 
     /** Wires stores and schedulers; approval decisions delegate to {@link ApprovalPolicy}. */
     public ChatController(ConversationStore conversations, MessageStore messages,
@@ -123,14 +121,13 @@ public final class ChatController {
         this.events = new SerialEvents(scheduler);
     }
     /** Attaches the error-log store used to record turn failures. */
-    public void setErrorLogStore(ErrorLogStore store) {
-        this.errorLogs = store;
-    }
+    public void setErrorLogStore(ErrorLogStore store) { failureLog.attach(store); }
 
-    /** Supplies the device and version summary prefixed to failure diagnostics; null becomes empty. */
-    public void setDeviceSummary(String value) {
-        deviceSummary = value == null ? "" : value.trim();
-    }
+    /** Sets the label prefixed to failure-log titles; used to name a sub agent session. */
+    public void setErrorLabel(String value) { failureLog.label(value); }
+
+    /** Supplies the device and version summary prefixed to failure diagnostics. */
+    public void setDeviceSummary(String value) { failureLog.deviceSummary(value); }
 
     /** Hook invoked when a send is attempted without a configured model. */
     public void setModelMissingHandler(Runnable handler) {
