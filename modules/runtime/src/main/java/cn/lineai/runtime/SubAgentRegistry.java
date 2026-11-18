@@ -6,6 +6,7 @@ import java.util.List;
 import java.util.Map;
 import java.util.concurrent.ConcurrentHashMap;
 
+import cn.lineai.core.kernel.error.FailureText;
 import cn.lineai.core.model.AgentExtension;
 import cn.lineai.core.model.AgentSessionRecord;
 import cn.lineai.core.model.AgentSessionStatus;
@@ -404,6 +405,10 @@ public final class SubAgentRegistry implements AgentRuntime {
                 graph.clock(), graph.assembler(), fixedCatalog, context, graph.extensions());
         controller.setAgentSystemPrompt(agent.prompt);
         controller.setAgentView(agentId, !persistent);
+        // Sub agents own their own ChatController, so the failure log and the label that names
+        // the session have to be wired here; the root controller is wired by AppGraph.
+        controller.setErrorLogStore(graph.errorLogs());
+        controller.setErrorLabel("Sub agent " + (agent.name.isEmpty() ? agentId : agent.name));
         return controller;
     }
 
@@ -461,7 +466,8 @@ public final class SubAgentRegistry implements AgentRuntime {
             }
             migrateLegacyConversations();
         } catch (RuntimeException error) {
-            System.err.println("agent session load failed: " + error);
+            graph.errorLogs().record("Sub agent sessions",
+                    FailureText.message(error), FailureText.stack(error));
         }
         recordsLoaded = true;
         recoverInterrupted();
@@ -514,7 +520,8 @@ public final class SubAgentRegistry implements AgentRuntime {
             try {
                 records.save(record);
             } catch (RuntimeException error) {
-                System.err.println("agent session save failed: " + record.id + ": " + error);
+                graph.errorLogs().record("Sub agent session " + record.id,
+                        FailureText.message(error), FailureText.stack(error));
             }
         });
     }

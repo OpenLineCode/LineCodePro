@@ -2,8 +2,10 @@ package cn.lineai.feature.extensions;
 
 import java.io.IOException;
 import java.io.InputStream;
+import java.util.ArrayList;
 import java.util.List;
 
+import cn.lineai.core.kernel.error.FailureReporter;
 import cn.lineai.core.kernel.time.Scheduler;
 import cn.lineai.core.model.Skill;
 import cn.lineai.data.api.SkillStore;
@@ -14,6 +16,12 @@ import static org.junit.Assert.assertEquals;
 import static org.junit.Assert.assertTrue;
 
 public class RemoteSkillInstallTest {
+
+    private final List<String> recorded = new ArrayList<>();
+
+    /** Reporter capturing the title and subtitle of every recorded failure. */
+    private final FailureReporter failures = (title, subtitle, detail) ->
+            recorded.add(title + " | " + subtitle);
 
     private SkillStore store(StringBuilder seen, boolean fail) {
         return new SkillStore() {
@@ -33,23 +41,26 @@ public class RemoteSkillInstallTest {
     @Test public void downloadsThenUsesSharedImportPipeline() {
         StringBuilder seen = new StringBuilder();
         final StringBuilder outcome = new StringBuilder();
-        RemoteSkillInstall.run(Scheduler.immediate(), store(seen, false),
+        RemoteSkillInstall.run(Scheduler.immediate(), store(seen, false), failures,
                 () -> new byte[] {1}, "remote.zip", new RemoteSkillInstall.Callback() {
                     public void onSuccess() { outcome.append("ok"); }
                     public void onError(String message) { outcome.append(message); }
                 });
         assertEquals("remote.zip", seen.toString());
         assertEquals("ok", outcome.toString());
+        assertTrue(recorded.isEmpty());
     }
 
     @Test public void reportsDownloadOrImportFailures() {
         StringBuilder seen = new StringBuilder();
         final StringBuilder error = new StringBuilder();
-        RemoteSkillInstall.run(Scheduler.immediate(), store(seen, true),
+        RemoteSkillInstall.run(Scheduler.immediate(), store(seen, true), failures,
                 () -> new byte[] {1}, "remote.zip", new RemoteSkillInstall.Callback() {
                     public void onSuccess() { error.append("ok"); }
                     public void onError(String message) { error.append(message); }
                 });
         assertTrue(error.toString().contains("bad zip"));
+        assertEquals(1, recorded.size());
+        assertTrue(recorded.get(0).contains("bad zip"));
     }
 }

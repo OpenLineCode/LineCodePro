@@ -5,6 +5,7 @@ import android.content.Intent;
 import android.net.Uri;
 import android.widget.Toast;
 
+import cn.lineai.core.kernel.error.FailureText;
 import cn.lineai.core.kernel.time.Scheduler;
 import cn.lineai.ui.i18n.R;
 import cn.lineai.ui.kit.Dialogs;
@@ -95,6 +96,8 @@ public final class ArchiveActions {
                                 summary.conversations, summary.models, summary.settings),
                         Toast.LENGTH_LONG).show());
             } catch (Exception error) {
+                host.graph().errorLogs().record("Archive export",
+                        FailureText.message(error), FailureText.stack(error));
                 scheduler.main(() -> Toast.makeText(host.activity(),
                         R.string.archive_failed, Toast.LENGTH_LONG).show());
             }
@@ -125,6 +128,8 @@ public final class ArchiveActions {
                             summary.models, summary.settings), Toast.LENGTH_LONG).show();
                 });
             } catch (Exception error) {
+                host.graph().errorLogs().record("Archive import",
+                        FailureText.message(error), FailureText.stack(error));
                 scheduler.main(() -> Toast.makeText(host.activity(),
                         R.string.archive_failed, Toast.LENGTH_LONG).show());
             }

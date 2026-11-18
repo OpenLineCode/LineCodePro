@@ -15,6 +15,7 @@ import android.widget.Toast;
 import java.util.ArrayList;
 import java.util.List;
 
+import cn.lineai.core.kernel.error.FailureReporter;
 import cn.lineai.core.kernel.time.Scheduler;
 import cn.lineai.core.model.SkillHubComment;
 import cn.lineai.core.model.SkillHubDetail;
@@ -33,6 +34,7 @@ public final class SkillHubDetailPage extends SettingsPage {
 
     private final Scheduler scheduler;
     private final SkillStore store;
+    private final FailureReporter failures;
     private final SkillHubApi api = new SkillHubApi();
     private final SkillIconLoader icons;
     private final String slug;
@@ -51,13 +53,15 @@ public final class SkillHubDetailPage extends SettingsPage {
      * @param back action invoked when the user navigates back
      * @param scheduler scheduler enforcing the I/O-to-main threading contract
      * @param store local skill store backing the install flow
+     * @param failures sink receiving failed installs
      * @param slug slug of the SkillHub entry to show
      */
     public SkillHubDetailPage(Context context, Tokens tokens, Runnable back, Scheduler scheduler,
-                              SkillStore store, String slug) {
+                              SkillStore store, FailureReporter failures, String slug) {
         super(context, R.string.skillhub_title_detail, tokens, back);
         this.scheduler = scheduler;
         this.store = store;
+        this.failures = failures;
         this.icons = new SkillIconLoader(scheduler);
         this.slug = slug == null ? "" : slug;
         Ui.padding(content, 16, 12, 16, 100);
@@ -399,7 +403,7 @@ public final class SkillHubDetailPage extends SettingsPage {
 
     /** Installs the skill through the shared remote install pipeline and disables the button. */
     private void install(SkillHubDetail value) {
-        RemoteSkillInstall.run(scheduler, store,
+        RemoteSkillInstall.run(scheduler, store, failures,
                 () -> api.download(value.slug, value.version), value.slug + ".zip",
                 new RemoteSkillInstall.Callback() {
                     public void onSuccess() {

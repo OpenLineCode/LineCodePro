@@ -228,7 +228,7 @@ public final class AppGraph implements AutoCloseable {
         final ToolContext toolContext = toolContext(context, clock, settingsStore, projectStore,
                 diffStore, memoryStore, modelStore, todoStore);
         final ToolCatalog baseCatalog = new McpToolCatalog(baseTools,
-                mcpExtensionStore::list, new McpClient()::callTool);
+                mcpExtensionStore::list, new McpClient(errorLogStore)::callTool);
         final ToolCatalog toolCatalog = toolCatalog(baseCatalog, agentExtensionStore, projectStore);
         this.toolCatalog = toolCatalog;
         this.baseCatalogForAgents = () -> applyWorkspacePolicy(baseCatalog.registry());

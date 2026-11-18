@@ -57,10 +57,20 @@ public class ChatControllerContextTest {
 
         controller.setDeviceSummary("  Pixel 9 (Android 15, SDK 35), app 2.2.0 (code 220)  ");
         assertEquals("Pixel 9 (Android 15, SDK 35), app 2.2.0 (code 220)",
-                controller.deviceSummary);
+                controller.failureLog.deviceSummary());
 
         controller.setDeviceSummary(null);
-        assertEquals("", controller.deviceSummary);
+        assertEquals("", controller.failureLog.deviceSummary());
+    }
+
+    @Test public void errorLabelNamesTheSessionInFailureTitles() {
+        ChatController controller = controller();
+
+        assertEquals("gpt", controller.failureLog.title("gpt"));
+        controller.setErrorLabel("Sub agent writer");
+        assertEquals("Sub agent writer - gpt", controller.failureLog.title("gpt"));
+        controller.setErrorLabel(null);
+        assertEquals("gpt", controller.failureLog.title("gpt"));
     }
 
     @Test public void openingAConversationFallsBackToSettingsContext() {

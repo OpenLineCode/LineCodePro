@@ -266,13 +266,11 @@ final class ChatTurnPipeline {
         String detail = ChatFailure.detail(error);
         // The transcript row and the toast keep the raw detail; the error log receives the
         // device, conversation, model and stack context needed to reproduce the failure.
-        String diagnostic = ErrorDiagnostics.format(chat.deviceSummary, chat.clock.nowMs(),
-                chat.conversationId, model, error,
+        String diagnostic = ErrorDiagnostics.format(chat.failureLog.deviceSummary(),
+                chat.clock.nowMs(), chat.conversationId, model, error,
                 android.util.Log.getStackTraceString(error));
-        if (chat.errorLogs != null) {
-            chat.errorLogs.record(model.displayName(),
-                    error.code().name() + " · " + error.detail(), diagnostic);
-        }
+        chat.failureLog.record(chat.failureLog.title(model.displayName()),
+                error.code().name() + " · " + error.detail(), diagnostic);
         android.util.Log.e("LineCodeChat", "generation failed: " + diagnostic);
         boolean created = streamingMessage == null;
         final Message failed = ChatFailure.message(streamingMessage, error, chat.conversationId,

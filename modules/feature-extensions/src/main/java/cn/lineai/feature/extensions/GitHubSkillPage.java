@@ -6,6 +6,7 @@ import android.widget.LinearLayout;
 import android.widget.TextView;
 import android.widget.Toast;
 
+import cn.lineai.core.kernel.error.FailureReporter;
 import cn.lineai.core.kernel.time.Scheduler;
 import cn.lineai.data.api.SkillStore;
 import cn.lineai.ui.i18n.R;
@@ -20,6 +21,7 @@ public final class GitHubSkillPage extends SettingsPage {
 
     private final Scheduler scheduler;
     private final SkillStore store;
+    private final FailureReporter failures;
     private final FormField url;
     private final TextView status;
 
@@ -31,12 +33,14 @@ public final class GitHubSkillPage extends SettingsPage {
      * @param back action invoked when the user navigates back
      * @param scheduler scheduler enforcing the I/O-to-main threading contract
      * @param store skill store receiving the imported archive via the shared install path
+     * @param failures sink receiving failed downloads and imports
      */
     public GitHubSkillPage(Context context, Tokens tokens, Runnable back, Scheduler scheduler,
-                           SkillStore store) {
+                           SkillStore store, FailureReporter failures) {
         super(context, R.string.skill_github_title, tokens, back);
         this.scheduler = scheduler;
         this.store = store;
+        this.failures = failures;
         Ui.padding(content, 16, 16, 16, 100);
         content.addView(ExtensionKit.notice(context, theme, Icons.GLOBE,
                 R.string.screen_extension_detail_install_github_desc),
@@ -69,7 +73,7 @@ public final class GitHubSkillPage extends SettingsPage {
             return;
         }
         status.setText(getContext().getString(R.string.skillhub_loading));
-        RemoteSkillInstall.run(scheduler, store,
+        RemoteSkillInstall.run(scheduler, store, failures,
                 () -> GitHubSkillDownloader.download(value), "github.zip",
                 new RemoteSkillInstall.Callback() {
                     public void onSuccess() {
