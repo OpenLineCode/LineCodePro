@@ -9,19 +9,18 @@ import java.io.InputStream;
 import java.io.InputStreamReader;
 import java.io.OutputStream;
 import java.net.HttpURLConnection;
-import java.net.URI;
-import java.net.URISyntaxException;
 import java.net.URL;
 import java.nio.charset.StandardCharsets;
 import java.util.LinkedHashMap;
 import java.util.List;
-import java.util.Locale;
 import java.util.Map;
+import java.util.function.BooleanSupplier;
 
 import cn.lineai.core.kernel.error.DomainException;
 import cn.lineai.core.kernel.error.ErrorCode;
 import cn.lineai.core.kernel.time.Cancellable;
 import cn.lineai.core.kernel.time.Scheduler;
+import cn.lineai.core.model.EndpointUrl;
 import cn.lineai.core.model.ModelConfig;
 import cn.lineai.engine.protocol.AnthropicCodec;
 import cn.lineai.engine.protocol.ChatRequest;
@@ -58,14 +57,27 @@ public final class HttpModelClient implements ModelClient {
     }
 
     private final Scheduler scheduler;
+    private final BooleanSupplier allowAnyHttp;
+
+    /**
+     * Creates a client over the given scheduler with plain HTTP limited to local and LAN hosts.
+     *
+     * @param scheduler scheduler that runs the blocking transport off the caller's thread
+     */
+    public HttpModelClient(Scheduler scheduler) {
+        this(scheduler, null);
+    }
 
     /**
      * Creates a client over the given scheduler.
      *
      * @param scheduler scheduler that runs the blocking transport off the caller's thread
+     * @param allowAnyHttp live source of the security setting that permits plain HTTP to a
+     *     public host; null keeps the default of local and LAN hosts only
      */
-    public HttpModelClient(Scheduler scheduler) {
+    public HttpModelClient(Scheduler scheduler, BooleanSupplier allowAnyHttp) {
         this.scheduler = scheduler;
+        this.allowAnyHttp = allowAnyHttp == null ? () -> false : allowAnyHttp;
     }
 
     /**
@@ -86,18 +98,24 @@ public final class HttpModelClient implements ModelClient {
     /**
      * Executes the request and drives the listener to its terminal callback.
      *
-     * <p>HTTP 401/403 surface as {@link ErrorCode#AUTH}; other non-2xx statuses and transport
-     * failures surface as {@link ErrorCode#NETWORK}; a cancelled connection surfaces as
-     * {@link ErrorCode#CANCELLED}. Decoder failures abort the stream after one error callback.</p>
+     * <p>An unusable base URL fails immediately as {@link ErrorCode#INVALID_INPUT} with the
+     * offending endpoint and the reason in the detail, because retrying or re-wording it as a
+     * network failure hides the one thing the user has to change. HTTP 401/403 surface as
+     * {@link ErrorCode#AUTH}; other non-2xx statuses and transport failures surface as
+     * {@link ErrorCode#NETWORK}; a cancelled connection surfaces as {@link ErrorCode#CANCELLED}.
+     * Decoder failures abort the stream after one error callback.</p>
      */
     private void run(ModelConfig model, ChatRequest request, Listener listener, Connection holder) {
-        if (!isAllowed(model.baseUrl)) {
-            listener.onError(new DomainException(ErrorCode.INVALID_INPUT, "unsupported endpoint"));
+        String baseUrl = EndpointUrl.normalize(model.baseUrl);
+        EndpointUrl.Problem problem = EndpointUrl.problem(baseUrl, allowAnyHttp.getAsBoolean());
+        if (problem != EndpointUrl.Problem.NONE) {
+            listener.onError(new DomainException(ErrorCode.INVALID_INPUT,
+                    EndpointUrl.describe(problem, baseUrl)));
             return;
         }
-        Plan plan = plan(model, request);
+        Plan plan = plan(model, request, baseUrl);
         HttpDiagnostics.Request diagnostic = new HttpDiagnostics.Request(model.protocol,
-                model.baseUrl, plan.url, model.modelId, plan.body);
+                baseUrl, plan.url, model.modelId, plan.body);
         Map<String, String> sentHeaders = sentHeaders(plan.headers);
         HttpURLConnection connection = null;
         try {
@@ -145,7 +163,7 @@ public final class HttpModelClient implements ModelClient {
     }
 
     /** Selects endpoint, headers, body and decoder for the model protocol. */
-    private static Plan plan(ModelConfig model, ChatRequest request) {
+    private static Plan plan(ModelConfig model, ChatRequest request, String baseUrl) {
         Map<String, String> headers = new LinkedHashMap<>();
         headers.put("Accept", "text/event-stream");
         String url;
@@ -155,7 +173,7 @@ public final class HttpModelClient implements ModelClient {
             case ANTHROPIC_MESSAGES:
                 headers.put("x-api-key", model.apiKey);
                 headers.put("anthropic-version", "2023-06-01");
-                url = AnthropicCodec.messagesEndpoint(model.baseUrl);
+                url = AnthropicCodec.messagesEndpoint(baseUrl);
                 body = AnthropicCodec.requestBody(request);
                 decoder = AnthropicCodec.decoder();
                 break;
@@ -165,15 +183,15 @@ public final class HttpModelClient implements ModelClient {
                 headers.put("originator", CodexCodec.ORIGINATOR);
                 headers.put("User-Agent", CodexCodec.ORIGINATOR + "/" + CodexCodec.PROTOCOL_VERSION
                         + " (Android; LineCode)");
-                url = CodexCodec.responsesEndpoint(model.baseUrl);
-                body = CodexCodec.requestBody(request, model.baseUrl);
+                url = CodexCodec.responsesEndpoint(baseUrl);
+                body = CodexCodec.requestBody(request, baseUrl);
                 decoder = CodexCodec.decoder();
                 break;
             case OPENAI_COMPATIBLE:
             case LOCAL_GGUF:
             default:
                 headers.put("Authorization", "Bearer " + model.apiKey);
-                url = OpenAiChatCodec.endpoint(model.baseUrl);
+                url = OpenAiChatCodec.endpoint(baseUrl);
                 body = OpenAiChatCodec.requestBody(request);
                 decoder = OpenAiChatCodec.decoder();
                 break;
@@ -259,55 +277,28 @@ public final class HttpModelClient implements ModelClient {
     }
 
     /**
-     * Allows HTTPS everywhere and plain HTTP only for exact loopback and emulator hosts.
+     * Reports whether a configured base URL can be turned into a request.
      *
-     * <p>The host is parsed as a URI and compared exactly, so look-alike hosts such as
-     * {@code localhost.example.com} or {@code 127.0.0.1.example.com} cannot pass the cleartext
-     * gate. IPv6 literals are compared without their brackets.</p>
+     * <p>The gate is shared with the provider form through {@link EndpointUrl}, so an address
+     * saved by the editor is never rejected later by the transport. A scheme-less value is
+     * repaired first: HTTP for a local or LAN host, HTTPS otherwise.</p>
      *
      * @param baseUrl candidate endpoint base URL, may be null
-     * @return true for an absolute HTTPS URL, or an HTTP URL whose host is an exact loopback or
-     *         emulator address
+     * @return true when the endpoint normalises into an absolute HTTP(S) URL that is safe to call
      */
     static boolean isAllowed(String baseUrl) {
-        String value = baseUrl == null ? "" : baseUrl.trim();
-        if (value.isEmpty()) {
-            return false;
-        }
-        URI uri;
-        try {
-            uri = new URI(value);
-        } catch (URISyntaxException error) {
-            return false;
-        }
-        String scheme = uri.getScheme() == null ? "" : uri.getScheme().toLowerCase(Locale.ROOT);
-        String host = uri.getHost();
-        if (host == null || host.isEmpty()) {
-            return false;
-        }
-        if ("https".equals(scheme)) {
-            return true;
-        }
-        if (!"http".equals(scheme)) {
-            return false;
-        }
-        return isCleartextHostAllowed(host);
+        return isAllowed(baseUrl, false);
     }
 
     /**
-     * Tests whether a parsed URI host is an exact loopback or emulator address.
+     * Reports whether a configured base URL can be turned into a request under the given policy.
      *
-     * @param host host returned by {@link URI#getHost()}, bracketed for IPv6 literals
-     * @return true only for {@code localhost}, {@code 127.0.0.1}, {@code ::1} and
-     *         {@code 10.0.2.2}
+     * @param baseUrl candidate endpoint base URL, may be null
+     * @param allowAnyHttp true when plain HTTP to any host is permitted
+     * @return true when the endpoint normalises into a usable URL
      */
-    private static boolean isCleartextHostAllowed(String host) {
-        String normalized = host.toLowerCase(Locale.ROOT);
-        if (normalized.startsWith("[") && normalized.endsWith("]")) {
-            normalized = normalized.substring(1, normalized.length() - 1);
-        }
-        return "localhost".equals(normalized) || "127.0.0.1".equals(normalized)
-                || "::1".equals(normalized) || "10.0.2.2".equals(normalized);
+    static boolean isAllowed(String baseUrl, boolean allowAnyHttp) {
+        return EndpointUrl.problem(baseUrl, allowAnyHttp) == EndpointUrl.Problem.NONE;
     }
 
     /**

@@ -173,7 +173,10 @@ public final class AppGraph implements AutoCloseable {
         final SkillStore skillStore = new FileSkillStore(
                 skillsRoot, settingsStore, clock);
         final TerminalProviderStore providerStore = new SqliteTerminalProviderStore(database, clock);
-        final ModelClient httpClient = new HttpModelClient(scheduler);
+        // The HTTP allowance is read per request: toggling it in the security settings takes
+        // effect on the next turn without rebuilding the graph.
+        final ModelClient httpClient = new HttpModelClient(scheduler,
+                () -> preferences().state().values.allowAnyHttp());
         final LocalModelBridge localBridge = LocalModelBridges.find();
         final ModelClient client = localBridge == null
                 ? httpClient : localBridge.wrap(httpClient, scheduler);

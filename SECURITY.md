@@ -184,8 +184,8 @@ artifacts, and the build and release pipeline, including for example:
   content being disclosed to an unintended recipient through exports, logs, crash reports, error
   messages, URLs, redirects, WebView state, clipboard, diffs, snapshots, or file sharing.
 - **Transport policy** — bypassing the HTTPS gate without enabling the documented switch,
-  cleartext traffic to a non-loopback host, redirect downgrades, or bypassing URL validation in
-  model, MCP, web-fetch, browser, or link handling.
+  cleartext traffic to a host the documented policy does not permit, redirect downgrades, or
+  bypassing URL validation in model, MCP, web-fetch, browser, or link handling.
 - **WebView and browser handling** — JavaScript injection, escaping errors, bridge exposure,
   cookie or session leakage to non-official domains, or file access in the built-in browser.
 - **Exported components and IPC** — abuse of an exported activity, service, or provider; URI
@@ -300,13 +300,19 @@ The following table summarizes the principal data flows.
   hostname validation. The application installs no custom trust manager, disables no hostname
   verification, and performs no certificate pinning.
 - HTTPS is required by default for model endpoints, MCP endpoints, web fetching, the built-in
-  browser, and links opened from answers. Plain HTTP is accepted only for loopback hosts and the
-  standard Android emulator loopback address (`10.0.2.2`).
-- Model endpoints, MCP endpoints, and the web-fetch tool enforce the HTTPS rule on their own and
-  are not relaxed by the browser setting described below.
+  browser, and links opened from answers. Plain HTTP is accepted for loopback hosts, the standard
+  Android emulator loopback address (`10.0.2.2`), and - for model and MCP endpoints only - private
+  and link-local LAN addresses (`10/8`, `172.16/12`, `192.168/16`, `169.254/16`, IPv6 ULA and
+  link-local) plus `*.local` names, so self-hosted gateways and inference servers on the same
+  network remain reachable.
+- Model endpoints and MCP endpoints enforce the HTTPS rule on their own. The model transport reads
+  the **Ignore HTTP restrictions** switch described below, so enabling it also admits a public
+  host over plain HTTP; MCP endpoints and the web-fetch tool ignore that switch and keep their own
+  rule.
 - The security settings include an **Ignore HTTP restrictions** switch, which is off by default
-  and permits plain HTTP to any host in the built-in browser and in opened links. It is intended
-  for trusted local networks and development environments only.
+  and permits plain HTTP to any host in the built-in browser, in opened links and for model
+  endpoints. It is intended for trusted local networks and development environments only, and it
+  lowers the confidentiality of model traffic and the provider credential carried by it.
 - A custom web-search endpoint is contacted at the URL and scheme the user configures. The
   application does not override that choice, so a plain-HTTP endpoint would carry search terms
   and any configured API key without transport encryption; use HTTPS endpoints.
@@ -388,9 +394,9 @@ critical systems.
   propose commands or file changes. Install skills only from sources you trust, and review the
   files before use.
 - **MCP servers** are reached over HTTP or HTTPS only; the application does not spawn local MCP
-  processes. The endpoint must use HTTPS except for loopback and emulator hosts. An MCP server is
-  a third party that receives tool calls and returns tool descriptions and results, both of which
-  can influence the model.
+  processes. The endpoint must use HTTPS, except for loopback, emulator, private/LAN and link-local
+  hosts, which may use plain HTTP. An MCP server is a third party that receives tool calls and
+  returns tool descriptions and results, both of which can influence the model.
 - **Terminal providers** are separate applications discovered through AIDL and reached through
   their published IPC interface. Provider packages are compared by the SHA-256 digests of their
   signing certificates: a provider signed with the same certificate as LineCode Pro is trusted
@@ -452,7 +458,7 @@ The following settings materially change the application's security posture. Val
 | Permission mode (chat header and tool settings) | Confirm | Auto runs mutating tools without approval; Read-only removes them. |
 | Chat mode | Agent | Plan and Chat expose read-only tools; Control exposes phone-control tools. |
 | Bypass path protection (Security settings) | Off | Allows tools and agents to access paths outside the workspace. |
-| Ignore HTTP restrictions (Security settings) | Off | Allows the built-in browser and opened links to use plain HTTP with any host; model, MCP, and web-fetch traffic still require HTTPS except for loopback hosts. |
+| Ignore HTTP restrictions (Security settings) | Off | Allows the built-in browser, opened links and model endpoints to use plain HTTP with any host; MCP and web-fetch traffic keep their own rule (HTTPS, except local and LAN hosts). |
 | Browser JavaScript (Security settings) | Off | Allows scripts to run in the in-app browser. |
 | Trust extensions with a different signature (Security settings) | Off | Loads extension and terminal-provider packages signed by a different certificate. |
 | Local shell tool group (tool settings) | Enabled | Disabling removes the shell tool family from the model. Execution is still subject to the permission mode. |

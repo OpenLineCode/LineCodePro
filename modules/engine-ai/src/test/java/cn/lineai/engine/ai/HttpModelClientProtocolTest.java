@@ -256,19 +256,50 @@ public class HttpModelClientProtocolTest {
         }
     }
 
-    @Test public void cleartextEndpointIsLimitedToExactLoopbackHosts() {
+    @Test public void cleartextEndpointIsLimitedToLocalAndLanHosts() {
         assertTrue(HttpModelClient.isAllowed("http://localhost:8080/v1"));
         assertTrue(HttpModelClient.isAllowed("http://127.0.0.1/v1"));
         assertTrue(HttpModelClient.isAllowed("http://[::1]:8080/v1"));
         assertTrue(HttpModelClient.isAllowed("http://10.0.2.2:11434/v1"));
+        assertTrue(HttpModelClient.isAllowed("http://192.168.1.10:11434/v1"));
         assertTrue(HttpModelClient.isAllowed("https://api.example.com/v1"));
+        assertTrue(HttpModelClient.isAllowed("http://api.example.com/v1", true));
+        assertFalse(HttpModelClient.isAllowed("http://api.example.com/v1"));
         assertFalse(HttpModelClient.isAllowed("http://localhost.example.com/v1"));
         assertFalse(HttpModelClient.isAllowed("http://127.0.0.1.example.com/v1"));
         assertFalse(HttpModelClient.isAllowed("http://10.0.2.2.example.com/v1"));
-        assertFalse(HttpModelClient.isAllowed("http://192.168.1.10/v1"));
         assertFalse(HttpModelClient.isAllowed("ftp://localhost/v1"));
+        assertFalse(HttpModelClient.isAllowed("ftp://localhost/v1", true));
         assertFalse(HttpModelClient.isAllowed(""));
         assertFalse(HttpModelClient.isAllowed(null));
+    }
+
+    @Test public void publicCleartextEndpointReachesTheTransportOnlyWithTheAllowance() {
+        sse = "data: {\"choices\":[{\"delta\":{\"content\":\"hi\"}}]}\n\ndata: [DONE]\n\n";
+        ModelConfig model = ModelConfig.builder().identity("m", "M")
+                .endpoint("p", "model", "http://api.example.com/v1")
+                .secret("k")
+                .protocol(ModelConfig.Protocol.OPENAI_COMPATIBLE)
+                .build();
+        ChatRequest request = ChatRequest.builder().model("model").system("sys")
+                .messages(java.util.Collections.singletonList(
+                        Message.builder().id("m1").conversationId("c").seq(1).role(Role.USER)
+                                .addBlock(cn.lineai.core.model.ContentBlock.text("hello")).build()))
+                .build();
+        Result blocked = new Result();
+        new HttpModelClient(Scheduler.immediate()).stream(model, request,
+                new ModelClient.Listener() {
+                    public void onEvent(StreamEvent event) { }
+                    public void onComplete() { blocked.completed = true; }
+                    public void onError(DomainException error) {
+                        blocked.failures.add(error.code().name());
+                        blocked.detail = error.detail();
+                    }
+                });
+        assertEquals(1, blocked.failures.size());
+        assertEquals("INVALID_INPUT", blocked.failures.get(0));
+        assertTrue(blocked.detail.contains("Security settings"));
+        assertNull(path.get());
     }
 
     @Test public void cleartextLookalikeEndpointFailsBeforeConnecting() {
@@ -276,6 +307,25 @@ public class HttpModelClientProtocolTest {
                 "http://localhost.example.com/v1");
         assertEquals(1, result.failures.size());
         assertEquals("INVALID_INPUT", result.failures.get(0));
+        assertNull(path.get());
+    }
+
+    @Test public void schemeLessLoopbackEndpointIsRepairedBeforeConnecting() {
+        sse = "data: {\"choices\":[{\"delta\":{\"content\":\"hi\"}}]}\n\ndata: [DONE]\n\n";
+        Result result = stream(ModelConfig.Protocol.OPENAI_COMPATIBLE, "k",
+                "127.0.0.1:" + server.getAddress().getPort() + "/v1");
+        assertEquals("/v1/chat/completions", path.get());
+        assertEquals("hi", result.text.toString());
+        assertTrue(result.failures.isEmpty());
+    }
+
+    @Test public void malformedEndpointNamesTheReasonAndTheAddress() {
+        Result result = stream(ModelConfig.Protocol.OPENAI_COMPATIBLE, "k",
+                "https://api.example.com/v 1");
+        assertEquals(1, result.failures.size());
+        assertEquals("INVALID_INPUT", result.failures.get(0));
+        assertTrue(result.detail.contains("malformed base URL"));
+        assertTrue(result.detail.contains("https://api.example.com/v 1"));
         assertNull(path.get());
     }
 

@@ -3,6 +3,8 @@ package cn.lineai.engine.ai;
 import java.net.URI;
 import java.util.Locale;
 
+import cn.lineai.core.model.EndpointUrl;
+
 /**
  * Validation and normalisation of MCP endpoint URLs.
  *
@@ -81,79 +83,13 @@ final class McpEndpoint {
     /**
      * Tests whether a cleartext HTTP host is local to the device or the local network.
      *
-     * <p>Only literal addresses and recognised local host names are accepted; no DNS resolution
-     * happens here, so validation never blocks on the network and a public host name cannot be
-     * smuggled in through a resolver.</p>
+     * <p>The address classification is shared with model endpoints through
+     * {@link EndpointUrl#isLocalHost(String)}, so both gates accept the same local hosts.</p>
      *
      * @param host host parsed from the URI, bracketed for IPv6 literals; may be empty
      * @return true for loopback, private/LAN or link-local addresses and local host names
      */
     private static boolean isCleartextHostAllowed(String host) {
-        if (host == null || host.isEmpty()) {
-            return false;
-        }
-        String value = host;
-        if (value.startsWith("[") && value.endsWith("]")) {
-            value = value.substring(1, value.length() - 1);
-        }
-        if ("localhost".equals(value) || "localhost.localdomain".equals(value)) {
-            return true;
-        }
-        if (value.endsWith(".local") && value.length() > ".local".length()) {
-            return true;
-        }
-        if (value.indexOf(':') >= 0) {
-            return isPrivateIpv6(value);
-        }
-        return isPrivateIpv4(value);
-    }
-
-    /** Tests whether a dotted-quad host is loopback, private RFC 1918 or IPv4 link-local. */
-    private static boolean isPrivateIpv4(String host) {
-        String[] parts = host.split("\\.", -1);
-        if (parts.length != 4) {
-            return false;
-        }
-        int[] octets = new int[4];
-        for (int index = 0; index < 4; index++) {
-            try {
-                octets[index] = Integer.parseInt(parts[index]);
-            } catch (NumberFormatException error) {
-                return false;
-            }
-            if (octets[index] < 0 || octets[index] > 255) {
-                return false;
-            }
-        }
-        return octets[0] == 127
-                || octets[0] == 10
-                || (octets[0] == 172 && octets[1] >= 16 && octets[1] <= 31)
-                || (octets[0] == 192 && octets[1] == 168)
-                || (octets[0] == 169 && octets[1] == 254);
-    }
-
-    /** Tests whether an IPv6 literal is loopback, unique-local or link-local. */
-    private static boolean isPrivateIpv6(String host) {
-        String value = host;
-        int zone = value.indexOf('%');
-        if (zone >= 0) {
-            value = value.substring(0, zone);
-        }
-        if ("::1".equals(value) || "0:0:0:0:0:0:0:1".equals(value)) {
-            return true;
-        }
-        if (value.startsWith("fc") || value.startsWith("fd")) {
-            return true;
-        }
-        String first = value.split(":", 2)[0];
-        if (first.isEmpty()) {
-            return false;
-        }
-        try {
-            int hextet = Integer.parseInt(first, 16);
-            return (hextet & 0xffc0) == 0xfe80;
-        } catch (NumberFormatException error) {
-            return false;
-        }
+        return EndpointUrl.isLocalHost(host);
     }
 }

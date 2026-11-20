@@ -427,6 +427,7 @@ public final class FeaturePageFactory {
         return new ProviderEditPage(host.activity(), host.tokens(),
                 host.graph().scheduler(), host.navigation()::back, provider,
                 host.graph().models().list(),
+                () -> host.graph().preferences().state().values.allowAnyHttp(),
                 new ProviderEditPage.Listener() {
                     public void onSave(cn.lineai.core.model.ProviderConfig saved,
                                        java.util.List<cn.lineai.core.model.ModelConfig> models,

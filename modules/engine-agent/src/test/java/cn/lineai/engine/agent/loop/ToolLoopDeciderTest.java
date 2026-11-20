@@ -3,6 +3,8 @@ package cn.lineai.engine.agent.loop;
 import java.util.Collections;
 import java.util.List;
 import org.junit.Test;
+import cn.lineai.core.kernel.error.DomainException;
+import cn.lineai.core.kernel.error.ErrorCode;
 import cn.lineai.tool.api.ToolCall;
 import static org.junit.Assert.*;
 
@@ -60,9 +62,22 @@ public class ToolLoopDeciderTest {
         assertEquals(LoopPhase.CANCELLED, decider.decide(ToolLoopState.idle(5),
                 new ToolLoopEvent.Cancel()).state.phase);
         assertEquals(LoopPhase.FAILED, decider.decide(ToolLoopState.idle(5),
-                new ToolLoopEvent.Failed("boom")).state.phase);
+                new ToolLoopEvent.Failed(new DomainException(ErrorCode.INVALID_INPUT, "boom")))
+                .state.phase);
         assertEquals(LoopPhase.COMPLETED, decider.decide(
                 ToolLoopState.idle(5).finished(FinishReason.STOP), new ToolLoopEvent.Start()).state.phase);
+    }
+
+    @Test public void failureKeepsTheOriginalErrorCode() {
+        DomainException error = new DomainException(ErrorCode.INVALID_INPUT, "missing base URL");
+        NextAction action = decider.decide(ToolLoopState.idle(5), new ToolLoopEvent.Failed(error));
+        NextAction.NotifyFailed notify = null;
+        for (NextAction.Effect effect : action.effects) {
+            if (effect instanceof NextAction.NotifyFailed) notify = (NextAction.NotifyFailed) effect;
+        }
+        assertNotNull(notify);
+        assertSame(error, notify.error);
+        assertEquals("missing base URL", action.state.lastError);
     }
 
     private static List<ToolCall> calls(int count) {

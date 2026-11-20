@@ -12,14 +12,14 @@ public class ProviderFormTest {
 
     @Test public void requiresNameEndpointAndKey() {
         ProviderForm form = ProviderForm.blank();
-        assertEquals(ProviderForm.Error.MISSING_NAME, form.validateForSave());
+        assertEquals(ProviderForm.Error.MISSING_NAME, form.validateForSave(false));
         form.name = "My provider";
-        assertEquals(ProviderForm.Error.MISSING_BASE_URL, form.validateForSave());
+        assertEquals(ProviderForm.Error.MISSING_BASE_URL, form.validateForSave(false));
         form.baseUrl = "https://api.example.com/v1";
-        assertEquals(ProviderForm.Error.MISSING_KEY, form.validateForSave());
+        assertEquals(ProviderForm.Error.MISSING_KEY, form.validateForSave(false));
         form.apiKey = "secret";
-        assertEquals(ProviderForm.Error.NONE, form.validateForSave());
-        assertTrue(form.canSave());
+        assertEquals(ProviderForm.Error.NONE, form.validateForSave(false));
+        assertTrue(form.canSave(false));
     }
 
     @Test public void trimsFieldsAndBuildsAProvider() {
@@ -59,7 +59,7 @@ public class ProviderFormTest {
         form.applyPreset(ModelPreset.find("claude"));
         assertEquals(ModelConfig.Protocol.ANTHROPIC_MESSAGES, form.protocol);
         assertEquals("https://api.anthropic.com", form.baseUrl);
-        assertEquals(ProviderForm.Error.MISSING_NAME, form.validateForSave());
+        assertEquals(ProviderForm.Error.MISSING_NAME, form.validateForSave(false));
     }
 
     @Test public void dropsBlankHeaderRowsAndTrimsNamedOnes() {
@@ -73,6 +73,33 @@ public class ProviderFormTest {
         assertEquals(1, provider.headers.size());
         assertEquals("X-Title", provider.headers.get(0).name);
         assertEquals("LineCode", provider.headers.get(0).value);
+    }
+
+    @Test public void repairsAPastedEndpointAndRejectsAnUnusableOne() {
+        ProviderForm form = ProviderForm.blank();
+        form.name = "Kilo";
+        form.apiKey = "key";
+        form.baseUrl = "kilocode.ai/api/openrouter";
+        assertEquals(ProviderForm.Error.NONE, form.validateForSave(false));
+        assertEquals("https://kilocode.ai/api/openrouter",
+                form.build(1L, () -> "id").baseUrl);
+
+        form.baseUrl = "ftp://kilocode.ai/v1";
+        assertEquals(ProviderForm.Error.INVALID_BASE_URL, form.validateForSave(false));
+        form.baseUrl = "http://127.0.0.1:11434/v1";
+        assertEquals(ProviderForm.Error.NONE, form.validateForSave(false));
+        form.baseUrl = "http://192.168.1.10:11434/v1";
+        assertEquals(ProviderForm.Error.NONE, form.validateForSave(false));
+    }
+
+    @Test public void publicCleartextFollowsTheHttpAllowance() {
+        ProviderForm form = ProviderForm.blank();
+        form.name = "Gateway";
+        form.apiKey = "key";
+        form.baseUrl = "http://api.example.com/v1";
+        assertEquals(ProviderForm.Error.INVALID_BASE_URL, form.validateForSave(false));
+        assertEquals(ProviderForm.Error.NONE, form.validateForSave(true));
+        assertTrue(form.canSave(true));
     }
 
     @Test public void localProtocolIsNotSelectable() {
