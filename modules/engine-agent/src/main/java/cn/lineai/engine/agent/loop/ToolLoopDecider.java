@@ -15,8 +15,11 @@ public final class ToolLoopDecider {
             return NextAction.of(state.cancelled());
         }
         if (event instanceof ToolLoopEvent.Failed) {
-            return NextAction.of(state.failed(((ToolLoopEvent.Failed) event).message),
-                    new NextAction.NotifyFailed());
+            ToolLoopEvent.Failed failure = (ToolLoopEvent.Failed) event;
+            String detail = failure.error.detail().isEmpty()
+                    ? failure.error.code().name() : failure.error.detail();
+            return NextAction.of(state.failed(detail),
+                    new NextAction.NotifyFailed(failure.error));
         }
         if (event instanceof ToolLoopEvent.Start) {
             return NextAction.of(state.phase(LoopPhase.AWAITING_MODEL), new NextAction.CallModel());

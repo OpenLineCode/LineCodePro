@@ -31,12 +31,15 @@ public final class ErrorTextMapper {
                 return TextRef.of(R.string.model_retry_failed);
             case STORAGE:
                 return TextRef.of(R.string.screen_storage_title);
+            case INVALID_INPUT:
+                // Inside a turn this code comes from the model endpoint gate; the generic
+                // "generation failed" text would leave the user without the one field to fix.
+                return TextRef.of(R.string.error_model_endpoint_invalid);
             case NETWORK:
             case TIMEOUT:
             case AUTH:
             case RATE_LIMIT:
             case NOT_FOUND:
-            case INVALID_INPUT:
             case TOOL_FAILED:
             case UNKNOWN:
             default:

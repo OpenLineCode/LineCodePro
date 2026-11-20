@@ -128,7 +128,7 @@
     <string name="settings_row_output_title">Output &amp; browser</string>
     <string name="settings_row_output_desc">Code wrap, page opening method and built-in browser JS</string>
     <string name="settings_row_security_allow_any_http_title">Ignore HTTP restrictions</string>
-    <string name="settings_row_security_allow_any_http_desc">When on, any HTTP address is allowed instead of being locked to HTTPS</string>
+    <string name="settings_row_security_allow_any_http_desc">When on, the browser, opened links and model endpoints accept any HTTP address instead of being locked to HTTPS</string>
     <string name="settings_row_storage_title">Storage management</string>
     <string name="settings_row_storage_desc">Chats, config, diff and workspace usage</string>
     <string name="settings_row_memory_title">Memory</string>
@@ -1233,6 +1233,7 @@
     <string name="toast_query_failed">Query failed</string>
     <string name="toast_ai_generate_failed_no_result">AI generation failed: no result returned</string>
     <string name="toast_ai_generate_failed">AI generation failed</string>
+    <string name="error_model_endpoint_invalid">The model endpoint is unusable. Check the base URL of this model\'s provider; a public http:// address also needs the HTTP allowance in Security settings.</string>
     <string name="composer_model_submenu_query_button">↓ Query models</string>
     <string name="composer_model_submenu_count_label">↓ %1$d models</string>
     <string name="composer_model_submenu_query_done_toast">Found %1$d models, please import them in model management</string>
@@ -1744,6 +1745,7 @@
     <string name="screen_provider_model_vision">Image</string>
     <string name="screen_provider_model_video">Video</string>
     <string name="screen_provider_save_require">Name, base URL and API key are required</string>
+    <string name="screen_provider_save_invalid_url">Base URL is unusable. Enter the full address, e.g. https://api.example.com/v1; http:// works for local and LAN hosts only - other hosts need the HTTP allowance in Security settings</string>
     <string name="screen_provider_delete_title">Delete provider</string>
     <string name="screen_provider_delete_message">Delete “%1$s” and its %2$d models?</string>
     <string name="screen_provider_advanced">Advanced</string>

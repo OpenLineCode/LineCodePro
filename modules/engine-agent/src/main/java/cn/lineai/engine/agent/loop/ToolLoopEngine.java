@@ -151,7 +151,7 @@ public final class ToolLoopEngine implements Cancellable {
             emit(new TimelineEvent.TurnFinished(state.finishReason));
         } else if (effect instanceof NextAction.NotifyFailed) {
             emit(new TimelineEvent.TurnFailed(
-                    new DomainException(ErrorCode.UNKNOWN, state.lastError)));
+                    ((NextAction.NotifyFailed) effect).error));
         } else if (effect instanceof NextAction.NotifyBudgetExceeded) {
             NextAction.NotifyBudgetExceeded budget = (NextAction.NotifyBudgetExceeded) effect;
             emit(new TimelineEvent.BudgetExceeded(budget.requested, budget.used, budget.max));
@@ -214,9 +214,11 @@ public final class ToolLoopEngine implements Cancellable {
             @Override public void onError(DomainException error) {
                 if (cancelled) return;
                 int next = attempt + 1;
-                if (next >= MAX_ATTEMPTS) {
-                    dispatch(new ToolLoopEvent.Failed(error.detail().isEmpty()
-                            ? error.code().name() : error.detail()));
+                // A rejected credential or an unusable endpoint fails identically every time;
+                // repeating it only delays the message the user needs. The failure is forwarded
+                // with its own code so the UI and the error log keep the classification.
+                if (!retryable(error.code()) || next >= MAX_ATTEMPTS) {
+                    dispatch(new ToolLoopEvent.Failed(error));
                     return;
                 }
                 emit(new TimelineEvent.Retry(next, MAX_ATTEMPTS, error));
@@ -230,6 +232,22 @@ public final class ToolLoopEngine implements Cancellable {
         if (firstDeltaNanos == 0L) {
             firstDeltaNanos = System.nanoTime();
         }
+    }
+
+    /**
+     * Reports whether the same request is worth repeating after this failure.
+     *
+     * <p>Only transport-level codes are transient. Configuration and credential failures
+     * ({@code INVALID_INPUT}, {@code AUTH}, {@code NOT_FOUND}), a missing prompt and a
+     * cancellation produce the same outcome on every attempt, so repeating them just delays the
+     * error report.</p>
+     *
+     * @param code classification reported by the model client
+     * @return true for failures that a later identical request may overcome
+     */
+    private static boolean retryable(ErrorCode code) {
+        return code == ErrorCode.NETWORK || code == ErrorCode.TIMEOUT
+                || code == ErrorCode.RATE_LIMIT || code == ErrorCode.UNKNOWN;
     }
 
     private void onResponse() {

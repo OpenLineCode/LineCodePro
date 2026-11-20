@@ -126,7 +126,7 @@
     <string name="settings_row_output_title">Вывод и браузер</string>
     <string name="settings_row_output_desc">Перенос кода, способ открытия страниц и JS встроенного браузера</string>
     <string name="settings_row_security_allow_any_http_title">Игнорировать HTTP ограничения</string>
-    <string name="settings_row_security_allow_any_http_desc">При включении разрешён любой HTTP-адрес вместо блокировки на HTTPS</string>
+    <string name="settings_row_security_allow_any_http_desc">При включении браузер, открытые ссылки и адреса моделей принимают любой HTTP-адрес вместо блокировки на HTTPS</string>
     <string name="settings_row_storage_title">Управление хранилищем</string>
     <string name="settings_row_storage_desc">Чаты, конфигурация, diff и использование рабочей области</string>
     <string name="settings_row_memory_title">Память</string>
@@ -1214,6 +1214,7 @@
     <string name="toast_query_failed">Сбой запроса</string>
     <string name="toast_ai_generate_failed_no_result">Сбой генерации AI: результат не возвращён</string>
     <string name="toast_ai_generate_failed">Сбой генерации AI</string>
+    <string name="error_model_endpoint_invalid">Адрес модели непригоден. Проверьте базовый URL провайдера этой модели; для публичного http:// также включите разрешение HTTP в настройках безопасности.</string>
     <string name="composer_model_submenu_query_button">↓ Запросить модели</string>
     <string name="composer_model_submenu_count_label">↓ %1$d моделей</string>
     <string name="composer_model_submenu_query_done_toast">Найдено %1$d моделей, импортируйте их в управлении моделями</string>
@@ -1742,6 +1743,7 @@
     <string name="screen_provider_model_vision">Изображение</string>
     <string name="screen_provider_model_video">Видео</string>
     <string name="screen_provider_save_require">Имя, базовый URL и API-ключ обязательны</string>
+    <string name="screen_provider_save_invalid_url">Базовый URL непригоден: укажите полный адрес, например https://api.example.com/v1; http:// работает только для локальных и LAN-адресов, для остальных включите разрешение HTTP в настройках безопасности</string>
     <string name="screen_provider_delete_title">Удалить провайдера</string>
     <string name="screen_provider_delete_message">Удалить «%1$s» и его модели (%2$d)?</string>
     <string name="screen_provider_advanced">Дополнительно</string>

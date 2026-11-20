@@ -19,6 +19,7 @@ import java.util.Map;
 
 import cn.lineai.core.kernel.error.DomainException;
 import cn.lineai.core.kernel.error.ErrorCode;
+import cn.lineai.core.model.EndpointUrl;
 import cn.lineai.core.model.HttpHeader;
 import cn.lineai.core.model.ModelConfig;
 
@@ -62,6 +63,7 @@ public final class ModelCatalogClient {
     public List<String> fetch(ModelConfig.Protocol protocol, String baseUrl, String apiKey,
                               List<HttpHeader> extraHeaders) {
         try {
+            String base = EndpointUrl.normalize(baseUrl);
             Map<String, String> headers = new LinkedHashMap<>();
             headers.put("Accept", "application/json");
             String url;
@@ -69,21 +71,21 @@ public final class ModelCatalogClient {
                 case ANTHROPIC_MESSAGES:
                     headers.put("x-api-key", safe(apiKey));
                     headers.put("anthropic-version", "2023-06-01");
-                    url = endpoint(rootOrigin(baseUrl), "/v1/models");
+                    url = endpoint(rootOrigin(base), "/v1/models");
                     break;
                 case CODEX_RESPONSES:
                     headers.put("Authorization", "Bearer " + safe(apiKey));
                     headers.put("version", CODEX_VERSION);
                     headers.put("originator", CODEX_ORIGINATOR);
                     headers.put("User-Agent", CODEX_ORIGINATOR + "/" + CODEX_VERSION + " (Android; LineCode)");
-                    url = endpoint(baseUrl, "/models") + "?client_version="
+                    url = endpoint(base, "/models") + "?client_version="
                             + URLEncoder.encode(CODEX_VERSION, "UTF-8");
                     break;
                 case OPENAI_COMPATIBLE:
                 case LOCAL_GGUF:
                 default:
                     headers.put("Authorization", "Bearer " + safe(apiKey));
-                    url = endpoint(baseUrl, "/models");
+                    url = endpoint(base, "/models");
                     break;
             }
             return parse(execute("GET", url, RequestHeaders.merge(headers, extraHeaders), null));

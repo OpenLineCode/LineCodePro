@@ -4,6 +4,8 @@ import java.util.ArrayList;
 import java.util.Collections;
 import java.util.List;
 
+import cn.lineai.core.kernel.error.DomainException;
+
 /** Decider output: the next state plus effects to execute outside the reducer. */
 public final class NextAction {
 
@@ -50,5 +52,17 @@ public final class NextAction {
 
     public static final class NotifyFinished implements Effect { }
 
-    public static final class NotifyFailed implements Effect { }
+    /** Terminal failure to forward unchanged; re-wrapping it here would lose its error code. */
+    public static final class NotifyFailed implements Effect {
+        public final DomainException error;
+
+        /**
+         * Creates the notification effect.
+         *
+         * @param error failure carried through from the model client or a tool
+         */
+        public NotifyFailed(DomainException error) {
+            this.error = error;
+        }
+    }
 }

@@ -6,6 +6,7 @@ import java.util.ArrayList;
 import java.util.Collections;
 import java.util.List;
 import cn.lineai.core.kernel.error.DomainException;
+import cn.lineai.core.kernel.error.ErrorCode;
 import cn.lineai.core.kernel.time.Cancellable;
 import cn.lineai.core.kernel.time.Scheduler;
 import cn.lineai.core.model.Message;
@@ -277,6 +278,28 @@ public class ToolLoopEngineTest {
         assertEquals(3, message.cachedTokens);
     }
 
+    @Test public void configurationFailuresAreNotRetriedAndKeepTheirCode() {
+        InvalidEndpointModel model = new InvalidEndpointModel();
+        final List<DomainException> failures = new ArrayList<>();
+        final List<Integer> retries = new ArrayList<>();
+        final ToolLoopEngine engine = new ToolLoopEngine(model, new ToolRegistry(), context(),
+                Scheduler.immediate(), 5);
+        engine.listen(new Events() {
+            public void failed(DomainException error) { failures.add(error); }
+            public void retrying(int attempt, int max, DomainException error) {
+                retries.add(attempt);
+            }
+        });
+        engine.start(config(), new ArrayList<Message>(), "c", "sys", null);
+
+        assertEquals(1, model.calls);
+        assertTrue(retries.isEmpty());
+        assertEquals(1, failures.size());
+        assertEquals(ErrorCode.INVALID_INPUT, failures.get(0).code());
+        assertEquals("missing base URL", failures.get(0).detail());
+        assertEquals(LoopPhase.FAILED, engine.state().value().phase);
+    }
+
     private static ModelConfig config() {
         return ModelConfig.builder().identity("m", "M")
                 .endpoint("p", "model", "https://example.com/v1").build();
@@ -399,6 +422,17 @@ public class ToolLoopEngineTest {
             listener.onEvent(StreamEvent.text("done"));
             listener.onEvent(StreamEvent.of("", "", "stop", 12, 5, 3));
             listener.onComplete();
+            return Cancellable.NONE;
+        }
+    }
+
+    /** Always fails with an unusable endpoint, which no retry can fix. */
+    private static final class InvalidEndpointModel implements ModelClient {
+        int calls;
+
+        public Cancellable stream(ModelConfig model, ChatRequest request, Listener listener) {
+            calls++;
+            listener.onError(new DomainException(ErrorCode.INVALID_INPUT, "missing base URL"));
             return Cancellable.NONE;
         }
     }

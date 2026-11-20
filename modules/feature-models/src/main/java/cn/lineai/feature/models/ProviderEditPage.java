@@ -14,9 +14,11 @@ import android.widget.Toast;
 
 import java.util.ArrayList;
 import java.util.List;
+import java.util.function.BooleanSupplier;
 
 import cn.lineai.core.kernel.time.Scheduler;
 import cn.lineai.core.kernel.util.Ids;
+import cn.lineai.core.model.EndpointUrl;
 import cn.lineai.core.model.HttpHeader;
 import cn.lineai.core.model.ModelConfig;
 import cn.lineai.core.model.ModelPreset;
@@ -66,6 +68,7 @@ public final class ProviderEditPage extends SettingsPage {
     private final ProviderConfig editing;
     private final ProviderForm form;
     private final List<ModelConfig> existingModels;
+    private final BooleanSupplier allowAnyHttp;
     private ProviderModelRows modelRows;
     private AdvancedHeadersSection advancedHeaders;
     private EditText nameInput;
@@ -90,10 +93,13 @@ public final class ProviderEditPage extends SettingsPage {
      * @param back header back action
      * @param provider provider to edit; null opens the add form
      * @param models models currently stored for the provider; null renders as empty
+     * @param allowAnyHttp live source of the security setting that permits plain HTTP to a
+     *     public host; null means local and LAN hosts only
      * @param listener persistence sink; never null
      */
     public ProviderEditPage(Context context, Tokens tokens, Scheduler scheduler, Runnable back,
-                            ProviderConfig provider, List<ModelConfig> models, Listener listener) {
+                            ProviderConfig provider, List<ModelConfig> models,
+                            BooleanSupplier allowAnyHttp, Listener listener) {
         super(context, provider == null
                 ? R.string.screen_provider_edit_title_add
                 : R.string.screen_provider_edit_title_edit, tokens, back);
@@ -102,6 +108,7 @@ public final class ProviderEditPage extends SettingsPage {
         this.editing = provider;
         this.form = ProviderForm.from(provider);
         this.existingModels = ownedBy(provider, models);
+        this.allowAnyHttp = allowAnyHttp == null ? () -> false : allowAnyHttp;
         Ui.padding(content, 16, 0, 16, 100);
 
         buildBasics();
@@ -342,7 +349,7 @@ public final class ProviderEditPage extends SettingsPage {
         saveAction.setOnClickListener(v -> save());
         bar().trailingAction(saveAction);
         theme.bind(t -> saveAction.setIconColor(
-                form.canSave() ? t.accent : t.textTertiary));
+                form.canSave(allowAnyHttp.getAsBoolean()) ? t.accent : t.textTertiary));
     }
 
     /** Copies the editable widgets back into the pure form. */
@@ -357,7 +364,7 @@ public final class ProviderEditPage extends SettingsPage {
     private void updateSaveState() {
         syncForm();
         renderFetchState(theme.current());
-        boolean can = form.canSave();
+        boolean can = form.canSave(allowAnyHttp.getAsBoolean());
         Tokens tokens = theme.current();
         if (saveAction != null) {
             saveAction.setIconColor(can ? tokens.accent : tokens.textTertiary);
@@ -381,15 +388,22 @@ public final class ProviderEditPage extends SettingsPage {
     private void fetch() {
         if (fetching) return;
         syncForm();
-        if (form.endpoint().isEmpty()) {
+        String endpoint = form.endpoint();
+        if (endpoint.isEmpty()) {
             Toast.makeText(getContext(), R.string.screen_provider_save_require,
                     Toast.LENGTH_SHORT).show();
+            return;
+        }
+        if (EndpointUrl.problem(endpoint, allowAnyHttp.getAsBoolean())
+                != EndpointUrl.Problem.NONE) {
+            Toast.makeText(getContext(), R.string.screen_provider_save_invalid_url,
+                    Toast.LENGTH_LONG).show();
             return;
         }
         fetching = true;
         renderFetchState(theme.current());
         final ModelConfig.Protocol protocol = form.protocol;
-        final String url = form.endpoint();
+        final String url = endpoint;
         final String key = form.credential();
         final List<HttpHeader> headers = advancedHeaders.headers();
         runOnIo(() -> {
@@ -420,9 +434,14 @@ public final class ProviderEditPage extends SettingsPage {
     /** Validates the form and hands the provider, model writes and deletions to the host. */
     private void save() {
         syncForm();
-        if (form.validateForSave() != ProviderForm.Error.NONE) {
-            Toast.makeText(getContext(), R.string.screen_provider_save_require,
-                    Toast.LENGTH_SHORT).show();
+        ProviderForm.Error problem = form.validateForSave(allowAnyHttp.getAsBoolean());
+        if (problem != ProviderForm.Error.NONE) {
+            // A blank field and an unusable URL need different advice: telling the user to "fill
+            // in the required fields" when the URL is merely malformed sends them in circles.
+            Toast.makeText(getContext(), problem == ProviderForm.Error.INVALID_BASE_URL
+                            ? R.string.screen_provider_save_invalid_url
+                            : R.string.screen_provider_save_require,
+                    Toast.LENGTH_LONG).show();
             return;
         }
         if (editing != null && editing.protocol != form.protocol && !existingModels.isEmpty()) {

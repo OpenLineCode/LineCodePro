@@ -128,7 +128,7 @@
     <string name="settings_row_output_title">输出与浏览</string>
     <string name="settings_row_output_desc">代码换行、网页打开方式和内置浏览器 JS</string>
     <string name="settings_row_security_allow_any_http_title">无视 HTTP 限制</string>
-    <string name="settings_row_security_allow_any_http_desc">开启后允许使用任意 HTTP 地址,而非锁定为 HTTPS</string>
+    <string name="settings_row_security_allow_any_http_desc">开启后内置浏览器、打开的链接与模型接口允许使用任意 HTTP 地址，而非锁定为 HTTPS</string>
     <string name="settings_row_storage_title">存储管理</string>
     <string name="settings_row_storage_desc">聊天、配置、diff 和工作区占用</string>
     <string name="settings_row_memory_title">记忆</string>
@@ -1234,6 +1234,7 @@
     <string name="toast_query_failed">查询失败</string>
     <string name="toast_ai_generate_failed_no_result">AI 生成失败：未返回结果</string>
     <string name="toast_ai_generate_failed">AI 生成失败</string>
+    <string name="error_model_endpoint_invalid">模型接口地址不可用，请检查该模型所属提供商的基础地址；公网 http:// 地址还需在安全设置中开启「无视 HTTP 限制」。</string>
     <string name="composer_model_submenu_query_button">↓ 查询模型</string>
     <string name="composer_model_submenu_count_label">↓ %1$d 个模型</string>
     <string name="composer_model_submenu_query_done_toast">查到 %1$d 个模型，请在管理模型中导入</string>
@@ -1745,6 +1746,7 @@
     <string name="screen_provider_model_vision">图像</string>
     <string name="screen_provider_model_video">视频</string>
     <string name="screen_provider_save_require">名称、基础地址和 API 密钥不能为空</string>
+    <string name="screen_provider_save_invalid_url">基础地址不可用：请填完整地址（如 https://api.example.com/v1）；http:// 仅支持本机或局域网地址，其他地址需先在安全设置中开启「无视 HTTP 限制」</string>
     <string name="screen_provider_delete_title">删除提供商</string>
     <string name="screen_provider_delete_message">删除「%1$s」及其 %2$d 个模型？</string>
     <string name="screen_provider_advanced">高级</string>

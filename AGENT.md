@@ -180,9 +180,16 @@ pipes cannot be drained with a timeout without a reader thread), `platform-andro
 
 - `releaseVersionName` in `app/build.gradle.kts` is the public version (e.g. `2.0.0`, no suffix);
   `versionCode` increases by one for every release. Bump both in the same commit as the changelog.
-- `update.md` is the single changelog, newest version first. Every version section must be
-  bilingual: an English part first, then a Chinese part, describing the same changes.
-- `update.md` and pull requests describe only differences from the last published release. Never
+- The changelog is one file per version per language under `update/`: `update/en/<version>.md` and
+  `update/zh/<version>.md`, where `<version>` matches `releaseVersionName` (e.g. `update/en/2.2.4.md`
+  and `update/zh/2.2.4.md`; pre-release tags keep their suffix, e.g. `2.0.0-next.md`). Each file
+  starts with the `# v<version>` title and uses `###` section headings. There is no single
+  `update.md`; do not recreate it and do not append new versions to existing files — a release
+  adds its own files.
+- Every changelog update is bilingual: a release adds both the English file (`update/en/`) and the
+  Chinese file (`update/zh/`) describing the same changes. Historical entries up to `v2.0.0-next`
+  exist as Chinese-only files; never backfill or rewrite them.
+- Changelog files and pull requests describe only differences from the last published release. Never
   document a defect that existed only in an unreleased development iteration (for example a
   regression introduced while developing the branch and fixed before release): remote users never
   encountered it. Describe shipped behaviour, not development history.

@@ -3,6 +3,7 @@ package cn.lineai.feature.models;
 import java.util.ArrayList;
 import java.util.List;
 
+import cn.lineai.core.model.EndpointUrl;
 import cn.lineai.core.model.HttpHeader;
 import cn.lineai.core.model.ModelConfig;
 import cn.lineai.core.model.ProviderConfig;
@@ -26,6 +27,8 @@ final class ProviderForm {
         MISSING_NAME,
         /** Base URL is blank. */
         MISSING_BASE_URL,
+        /** Base URL is not an absolute HTTP(S) URL, or uses plain HTTP for a public host. */
+        INVALID_BASE_URL,
         /** API key is blank. */
         MISSING_KEY
     }
@@ -109,12 +112,16 @@ final class ProviderForm {
     }
 
     /**
-     * Returns the trimmed base URL.
+     * Returns the normalised base URL.
      *
-     * @return trimmed URL, or an empty string when blank
+     * <p>A missing scheme is filled in, full-width punctuation is folded back to ASCII and
+     * trailing slashes are dropped, so a pasted endpoint is stored exactly as the transport will
+     * call it.</p>
+     *
+     * @return usable URL, or an empty string when blank
      */
     String endpoint() {
-        return baseUrl == null ? "" : baseUrl.trim();
+        return EndpointUrl.normalize(baseUrl);
     }
 
     /**
@@ -130,11 +137,17 @@ final class ProviderForm {
      * Validates the fields the save path needs, in screen order so the first error matches the
      * topmost broken input.
      *
+     * @param allowAnyHttp true when the user allowed plain HTTP to any host in the security
+     *     settings; without it, plain HTTP passes only for local and LAN hosts
      * @return the first blocking error, or {@link Error#NONE}
      */
-    Error validateForSave() {
+    Error validateForSave(boolean allowAnyHttp) {
         if (displayName().isEmpty()) return Error.MISSING_NAME;
-        if (endpoint().isEmpty()) return Error.MISSING_BASE_URL;
+        String url = endpoint();
+        if (url.isEmpty()) return Error.MISSING_BASE_URL;
+        if (EndpointUrl.problem(url, allowAnyHttp) != EndpointUrl.Problem.NONE) {
+            return Error.INVALID_BASE_URL;
+        }
         if (credential().isEmpty()) return Error.MISSING_KEY;
         return Error.NONE;
     }
@@ -142,10 +155,12 @@ final class ProviderForm {
     /**
      * Save gate mirroring {@link #validateForSave} so the action and the message never disagree.
      *
+     * @param allowAnyHttp true when the user allowed plain HTTP to any host in the security
+     *     settings
      * @return true when every required field is filled in
      */
-    boolean canSave() {
-        return validateForSave() == Error.NONE;
+    boolean canSave(boolean allowAnyHttp) {
+        return validateForSave(allowAnyHttp) == Error.NONE;
     }
 
     /**
