@@ -184,15 +184,18 @@ jobs:
         env:
           NEW_VERSION_NAME: ${{ needs.check-version-change.outputs.new_version_name }}
         run: |
-          # 从 update.md 提取当前版本的更新内容（仅保留当前版本块，不包含历史）
-          if [ -f update.md ]; then
-            awk -v target="## v${NEW_VERSION_NAME}" '
-              /^## v/ {
-                if ($0 == target) { in_block = 1 }
-                else if (in_block) { in_block = 0 }
-              }
-              in_block { print }
-            ' update.md > version_notes.md || echo "" > version_notes.md
+          # 更新日志已按 update/<语言>/<版本>.md 拆分（见 AGENT.md）：发布说明同时
+          # 读取英文与中文两份文件，并去掉各自的 "# v<版本>" 首行标题
+          EN_NOTES="update/en/${NEW_VERSION_NAME}.md"
+          ZH_NOTES="update/zh/${NEW_VERSION_NAME}.md"
+          if [ -f "$EN_NOTES" ] || [ -f "$ZH_NOTES" ]; then
+            : > version_notes.md
+            for notes_file in "$EN_NOTES" "$ZH_NOTES"; do
+              if [ -f "$notes_file" ]; then
+                sed '1d' "$notes_file" >> version_notes.md
+                printf '\n' >> version_notes.md
+              fi
+            done
           else
             echo "" > version_notes.md
           fi
